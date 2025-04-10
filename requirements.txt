@@ -1,0 +1,6 @@
+Flask
+Flask-SocketIO
+openai
+torch
+openai-whisper
+requests

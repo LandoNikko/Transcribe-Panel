@@ -1,0 +1,2595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kaira Transcribe Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
+  <style>
+    :root {
+
+      /* 
+      To-Do List:
+      - Implement offline model (requires wavesurfer.js and check requirements for local Whisper models to work)
+      - Integrate LLM translation (with user's ChatGPT, Claude API)
+        - Local quantized LLM models
+      - Ensure ARIA compliance
+      */
+
+        
+      /* E Ink theme colors */
+      --primary-color: #333333;
+      --primary-dark: #1a1a1a;
+      --primary-bg: #f2f2f2;
+      --secondary-bg: #e6e6e6;
+      --tertiary-bg: #d9d9d9;
+      --highlight-bg: #cccccc;
+      --text-primary: #1a1a1a;
+      --text-secondary: #4d4d4d;
+      --text-tertiary: #808080;
+      --border-color: #b3b3b3;
+      --highlight: #4d4d4d;
+      --error: #8c1c1c;
+      --success: #245a24;
+      --warning: #8c680b;
+      --transition: all 0.2s ease-in-out;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      --radius: 8px;
+      --radius-lg: 12px;
+      --header-height: 64px;
+      --sidebar-width: 260px;
+    }
+
+    /* Nova theme colors */
+    .nova-theme {
+      --primary-color: #10b981;
+      --primary-dark: #059669;
+      --primary-bg: #262a37;
+      --secondary-bg: #1a1d26;
+      --tertiary-bg: #141a1e;
+      --highlight-bg: #059669;
+      --text-primary: #f3f4f6;
+      --text-secondary: #9ca3af;
+      --text-tertiary: #6b7280;
+      --border-color: #374151;
+      --highlight: #10b981;
+      --error: #ef4444;
+      --success: #3e884e;
+      --warning: #f59e0b;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Minty theme colors */
+    .minty-theme {
+      --primary-color: #ff6f61;
+      --primary-dark: #ff6f61;
+      --primary-bg: #e8f5e9;
+      --secondary-bg: #c8e6c9;
+      --tertiary-bg: #e6fae4;
+      --highlight-bg: #dcedc8;
+      --text-primary: #3e2723;
+      --text-secondary: #5d4037;
+      --text-tertiary: #9e8780;
+      --border-color: #b2d3ad;
+      --highlight: #ff6f61;
+      --error: #e03939;
+      --success: #81c784;
+      --warning: #ecffe2;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+    }
+
+        /* Toffee theme colors */
+        .Toffee-theme {
+      --primary-color: #c98900;
+      --primary-dark: #c59734;
+      --primary-bg: #1a1a1a;
+      --secondary-bg: #121212;
+      --tertiary-bg: #131210;
+      --highlight-bg: #333333;
+      --text-primary: #c7bda8;
+      --text-secondary: #c0c0c0;
+      --text-tertiary: #909090;
+      --border-color: #404040;
+      --highlight: #ffae00;
+      --error: #b83434;
+      --success: #4caf50;
+      --warning: #ffc107;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Transitions */
+    .header, .sidebar, .card, .input-panel, .settings-panel, .transcript-panel, .dropzone, .file-item, .btn, .toast, input, textarea, .api-key-input, .transcript-segment, .tab-btn {
+      transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif; background-color: var(--primary-bg); color: var(--text-primary); line-height: 1.5;
+      transition: background-color 0.3s ease, color 0.3s ease; overflow-x: hidden;
+    }
+    h1, h2, h3, h4, h5, h6 { font-weight: 600; line-height: 1.3; }
+    h1 { font-size: 2rem;}
+    h2 { font-size: 1.5rem;}
+    h3 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+    a { color: var(--primary-dark); text-decoration: none; transition: var(--transition); }
+    a:hover { color: var(--primary-color); }
+    .app-container { display: grid; grid-template-columns: var(--sidebar-width) 1fr; grid-template-rows: var(--header-height) 1fr; grid-template-areas: "header header" "sidebar main"; min-height: 100vh; }
+    .header { grid-area: header; display: flex; align-items: center; justify-content: center; padding: 0 1.5rem; background-color: var(--secondary-bg); border-bottom: 1px solid var(--border-color); position: relative; overflow: hidden; z-index: 10; }
+    .logo { display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); font-family: 'Merriweather', serif; }
+    .logo i { color: var(--primary-color); font-size: 2rem; }
+    .logo h1 { margin: 0; font-size: 1.5rem; font-weight: 700; }
+    .logo a { display: flex; align-items: center; gap: 0.5rem; text-decoration: none; color: inherit; cursor: pointer; }
+    .logo .highlight-text { 
+      transition: color 0.3s ease-in-out; 
+      color: inherit;
+    }
+    .logo a:hover .highlight-text { 
+      color: var(--primary-color); 
+      animation: fadeInOut 1.5s ease-in-out;
+    }
+
+    @keyframes fadeInOut {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+    .header-actions { display: flex; align-items: center; gap: 1rem; position: absolute; right: 1.5rem; }
+    .header-actions button { font-size: 1rem; }
+    .sidebar { grid-area: sidebar; background-color: var(--secondary-bg); border-right: 1px solid var(--border-color); padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; height: calc(100vh - var(--header-height)); }
+    .sidebar-section { margin-bottom: 1.5rem; }
+    .sidebar-section:last-child { margin-top: auto; }
+    .notification-hint { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.4; }
+    .sidebar-section h2 { font-size: 1.1rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); }
+    .sidebar-section h3 { font-size: 1.1rem; color: var(--primary-color); }
+    .sidebar-section p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; }
+    .sidebar-section li { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; margin-left: 2em; }
+    .stats { display: flex; flex-direction: column; gap: 1rem; }
+    .stat-item { display: flex; justify-content: space-between; align-items: center; }
+    .stat-label { font-size: 0.9rem; color: var(--text-secondary); }
+    .stat-value { font-weight: 600; font-size: 1.1rem; }
+    .stats-loading { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-secondary); }
+    .stats-loading svg { color: var(--primary-color); margin-top: 0.25rem; }
+    @keyframes statsSpinner { to { transform: rotate(360deg); } }
+    .main-container { grid-area: main; display: flex; height: calc(100vh - var(--header-height)); background-color: var(--primary-bg); backdrop-filter: blur(5px); }
+    .input-panel { flex: 1; height: 100%; overflow-y: auto; padding: 1.5rem; border-right: 1px solid var(--border-color); }
+    .input-panel-content { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
+    .files-column { flex: 1; min-width: 0; }
+    .settings-column { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; /* Needed for sticky button */}
+    .output-panel { flex: 1; height: 100%; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--secondary-bg); }
+    ::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background-color: var(--text-tertiary); }
+    .dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 2.5rem 1.5rem; background-color: var(--secondary-bg); border: 2px dashed var(--border-color); border-radius: var(--radius); cursor: pointer; transition: var(--transition); margin-bottom: 1.5rem; }
+    .dropzone:hover, .dropzone.dragover { border-color: var(--primary-color); background-color: var(--tertiary-bg); }
+    .dropzone i { font-size: 2.5rem; color: var(--primary-color); margin-bottom: 1rem; }
+    .dropzone-title { font-weight: 600; margin-bottom: 0.5rem; }
+    .dropzone-desc { color: var(--text-secondary); text-align: center; margin-bottom: 1rem; }
+    .dropzone input[type="file"] { display: none; }
+    .file-list { margin-bottom: 1.5rem; }
+    .file-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .file-list-title { font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+    .file-list-title i { color: var(--primary-color); }
+    .file-count { background-color: var(--tertiary-bg); color: var(--text-secondary); padding: 0.25rem 0.5rem; border-radius: 1rem; font-size: 0.85rem; }
+    .file-list-actions { display: flex; gap: 0.5rem; }
+    .file-item { display: flex; align-items: center; padding: 0.75rem 1rem; background-color: var(--secondary-bg); border: 1px solid var(--border-color); border-radius: var(--radius); margin-bottom: 0.5rem; transition: var(--transition); cursor: pointer; position: relative; }
+    .file-item:hover { background-color: var(--tertiary-bg); }
+    .file-item.selected { border-left: 3px solid var(--primary-color); background-color: var(--tertiary-bg); }
+    .file-item.completed::after { content: ""; position: absolute; top: 0; right: 0; width: 6px; height: 100%; background-color: var(--success); border-top-right-radius: var(--radius); border-bottom-right-radius: var(--radius); }
+    .file-item.processing::after { content: ""; position: absolute; top: 0; right: 0; width: 6px; height: 100%; background-color: var(--warning); animation: pulse 2s infinite; border-top-right-radius: var(--radius); border-bottom-right-radius: var(--radius); }
+    .file-item.failed { border-left: 3px solid var(--error) !important; } /* Style for failed items */
+    @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+    .file-checkbox { margin-right: 0.75rem; display: flex; align-items: center; }
+    .file-checkbox input[type="checkbox"] { display: none; }
+    .file-checkbox label { width: 18px; height: 18px; border: 2px solid var(--border-color); border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: var(--transition); cursor: auto; }
+    .file-checkbox input[type="checkbox"]:checked + label { background-color: var(--primary-color); border-color: var(--primary-color); }
+    .file-checkbox input[type="checkbox"]:checked + label i { display: block; color: white; font-size: 12px; }
+    .file-checkbox label i { display: none; }
+    .file-icon { background-color: var(--tertiary-bg); color: var(--primary-color); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; margin-right: 0.75rem; }
+    .file-info { flex: 1; min-width: 0; }
+    .file-name { font-weight: 500; margin-bottom: 0.25rem; }
+    .file-meta { display: flex; align-items: center; gap: 1rem; font-size: 0.85rem; color: var(--text-tertiary); }
+    .file-meta span { display: flex; align-items: center; gap: 0.25rem; }
+    .file-status { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase; font-weight: 600; }
+    .file-status.idle { background-color: var(--tertiary-bg); color: var(--text-secondary); }
+    .file-status.processing { background-color: var(--border-color); color: var(--warning); }
+    .file-status.completed { background-color: var(--border-color); color: var(--success); }
+    .file-status.failed { background-color: var(--border-color); color: var(--error); }
+    .file-models { display: flex; gap: 0.5rem; margin-left: auto; }
+    .file-model { background-color: var(--success); color: var(--tertiary-bg); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+    .file-actions { display: flex; gap: 0.5rem; margin-left: 0.75rem; }
+    .file-actions button { background: none; border: none; color: var(--border-color); font-size: 1rem; cursor: pointer; transition: var(--transition); padding: 0.25rem; }
+    .file-actions button:hover { color: var(--text-primary); }
+
+    /* Home option styles */
+    .home-option { margin-bottom: 1rem; }
+
+    /* Settings Panel */
+    .settings-panel { background-color: var(--secondary-bg); border-radius: var(--radius); padding: 1.5rem; flex: 1; overflow-y: auto; /* Allow scroll */ }
+    .settings-title { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+    .settings-title i { color: var(--primary-color); }
+    .model-options { margin-bottom: 1.5rem; order: 0; }
+    .options-title { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .options-title i { color: var(--primary-color); }
+    .options-title h3, .options-title h4 { margin: 0; font-size: 0.9rem; font-weight: 500; }
+    .model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; grid-auto-rows: 1fr; }
+    .model-option { position: relative; }
+    .model-option input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .model-option label { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 1rem 0.5rem; background-color: var(--primary-bg); border: 1px solid var(--border-color); border-radius: var(--radius); cursor: pointer; transition: var(--transition); height: 100%; }
+    .model-option label:hover { background-color: var(--secondary-bg); }
+    .model-option input:checked + label { background-color: var(--tertiary-bg); border-color: var(--primary-color); }
+    .model-option input:checked + label:hover { background-color: var(--tertiary-bg); }
+    .model-option input:checked + label .model-name { color: var(--primary-dark); font-weight: 700; }
+    .model-icon { font-size: 1.25rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
+    .model-option input:checked + label .model-icon { color: var(--primary-color); }
+    .model-name { font-weight: 600; font-size: 0.9rem; }
+    .model-desc { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 0.25rem; }
+    .model-done-badge { position: absolute; top: -6px; right: -6px; background-color: var(--success); color: white; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.3rem; border-radius: 3px; }
+    .api-key-section { margin-bottom: 1.5rem; display: none; order: 1; }
+    .api-key-section.active { display: block; }
+    .api-key-input { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .api-key-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 0.5rem; }
+    .api-key-header h4 { font-size: 0.9rem; font-weight: 500; color: var(--text-secondary); margin: 0; }
+    .api-key-toggle { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 1.2rem; padding: 0.25rem; line-height: 1; }
+    .api-key-toggle:hover { color: var(--text-primary); }
+    .api-key-instructions { display: none; /* Hidden by default */ margin-top: 0.5rem; padding: 0.75rem 1rem; background-color: rgba(0, 0, 0, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm, 6px); font-size: 0.85rem; color: var(--text-secondary); }
+    .api-key-instructions h4 { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem; }
+    .api-key-instructions ol { margin-left: 1.25rem; padding-left: 0.5rem; line-height: 1.6; }
+    .api-key-instructions li { margin-bottom: 0.25rem; }
+    .api-key-instructions a { color: var(--primary-dark); text-decoration: underline; }
+    .api-key-instructions a:hover { color: var(--primary-color); }
+    .api-key-instructions .small-note { margin-top: 0.75rem; font-size: 0.8rem; font-style: italic; color: var(--text-tertiary); }
+
+    /* Progress Bar */
+    .progress-container { height: 6px; background-color: var(--tertiary-bg); border-radius: 1rem; overflow: hidden; margin-top: 1rem; display: none; }
+    .progress-container.active { display: block; }
+    .progress-bar { height: 100%; background-color: var(--primary-color); border-radius: 1rem; width: 0; transition: width 0.3s ease; animation: pulse 2s infinite; }
+    .progress-info { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; }
+
+    /* Preview Panel */
+    .preview-panel { background-color: var(--secondary-bg); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .preview-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .preview-title-text { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
+    .preview-title-text i { color: var(--primary-color); }
+    .preview-options { display: flex; gap: 0.5rem; }
+    .preview-options .btn.active {
+        background-color: var(--tertiary-bg);
+        color: var(--primary-color);
+        font-weight: 600;
+        border: 1px solid var(--primary-color);
+        padding: 0.3rem 0.7rem;
+    }
+    .preview-player { width: 100%; max-height: 300px; background-color: var(--tertiary-bg); border-radius: var(--radius); margin-bottom: 1rem; display: none; }
+    .waveform-container { background-color: var(--primary-bg); border-radius: var(--radius); border: 1px solid var(--border-color); padding: 0.5rem 1rem; margin-bottom: 1rem; display: none; align-items: center; gap: 1rem; }
+    .wave-wrapper { flex: 1; height: 60px; position: relative; }
+    .time-display { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary); position: absolute; bottom: -2.5em; left: 0; right: 0; }
+    .controls { display: flex; justify-content: center; }
+    .play-btn { width: 40px; height: 40px; border-radius: 50%; background-color: var(--primary-color); border: none; color: white; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition); }
+    .play-btn:hover { background-color: var(--primary-dark); }
+
+    /* Transcript Panel */
+    .transcript-panel { background-color: var(--secondary-bg); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; flex: 1; margin-bottom: 0; border: 1px solid var(--border-color); }
+    .transcript-header { border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 1rem 1.5rem; }
+    .transcript-title { display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-weight: 600; margin-bottom: 1rem; text-align: center; }
+    .transcript-controls { display: flex; justify-content: space-between; align-items: flex-end; }
+    .transcript-title i { color: var(--primary-color); }
+    .transcript-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    /* Using the unified button-tab style instead of redundant tab-btn style */
+    .transcript-actions { display: flex; gap: 0.5rem; }
+    .transcript-content { flex: 1; overflow-y: auto; padding: 1.5rem; position: relative; background-color: var(--primary-bg); }
+    .transcript-segment { padding: 0.75rem 1rem; background-color: var(--secondary-bg); border-radius: var(--radius); margin-bottom: 0.75rem; transition: var(--transition); position: relative; }
+    .transcript-segment:hover { background-color: var(--tertiary-bg); }
+    .seek-btn { position: absolute; top: 0.5rem; right: 0.5rem; opacity: 0; transition: opacity 0.2s ease-in-out; z-index: 10; }
+    .transcript-segment:hover .seek-btn { opacity: 1; }
+    .transcript-segment.highlighted { background-color: var(--tertiary-bg); border-left: 3px solid var(--primary-color); }
+    .segment-time { font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.25rem; }
+    .segment-text { line-height: 1.5; }
+    .loading-overlay { 
+        position: absolute; 
+        top: 0; 
+        left: 0; 
+        width: 100%; 
+        height: 100%; 
+        background-color: var(--primary-bg); 
+        opacity: 0.94;
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        justify-content: center; 
+        z-index: 5; 
+    }
+    .loading-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; z-index: 10; }
+    .loading-text { color: var(--text-primary); font-weight: 500; font-size: 1.2rem; text-align: center; }
+    .loading-bars { display: inline-flex; margin-top: 0.5rem; color: var(--primary-color); }
+    .loading-bars svg { transform: rotate(90deg); }
+    .loading-bars span { width: 6px; height: 6px; background-color: var(--primary-color); border-radius: 50%; margin: 0 3px; animation: dots 1.5s infinite; }
+    .loading-bars span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-bars span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dots { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+    .typewriter-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+    .typewriter-letter { 
+        position: absolute; 
+        font-family: monospace; 
+        color: var(--primary-color); 
+        opacity: 0; 
+        animation: randomFadeBg 3.5s ease-in-out forwards; 
+        font-size: 20px; 
+    }
+    @keyframes randomFadeBg { 
+        0% { opacity: 0; transform: scale(0.8); } 
+        40% { opacity: 0.5; transform: scale(1); } 
+        100% { opacity: 0; transform: scale(1.2); } 
+    }
+
+    /* Buttons & Forms */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.5rem 1rem; font-size: 0.9rem; font-weight: 500; border-radius: var(--radius); cursor: pointer; transition: var(--transition); border: 1px solid transparent; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn i { font-size: 1.1rem; }
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+    .btn-primary { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
+    .btn-primary:hover:not(:disabled) { background-color: var(--primary-dark); border-color: var(--primary-dark); }
+    .btn-secondary { background-color: var(--tertiary-bg); color: var(--text-primary); border: 1px solid var(--border-color); }
+    .btn-secondary:hover:not(:disabled) { background-color: var(--highlight-bg); }
+    .btn-danger { background-color: var(--error); color: white; border-color: var(--error); }
+    .btn-danger:hover:not(:disabled) { background-color: #6b1616; border-color: #6b1616; }
+    .btn-ghost { background-color: transparent; color: var(--text-secondary); border: none; }
+    .btn-ghost:hover:not(:disabled) { background-color: var(--tertiary-bg); color: var(--text-primary); }
+    .btn-icon { padding: 0.5rem; border-radius: 50%; border: none; }
+    .btn-large { padding: 0.75rem 1.5rem; font-size: 1.1rem; font-weight: 600; }
+    .input { background-color: var(--primary-bg); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 0.5rem 1rem; font-size: 0.9rem; color: var(--text-primary); transition: var(--transition); width: 100%; }
+    .input:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(51, 51, 51, 0.1); }
+    .tab-btn { background: none; border: 1px solid transparent; color: var(--text-secondary); font-size: 0.9rem; font-weight: 500; padding: 0.3rem 0.6rem; border-radius: var(--radius); cursor: pointer; transition: var(--transition); margin-bottom: 0.25rem; }
+    .tab-btn:hover:not(.active) { color: var(--text-primary); background-color: var(--tertiary-bg); }
+    .tab-btn.active { color: var(--primary-dark); background-color: var(--tertiary-bg); font-weight: 600; border-color: var(--primary-color); }
+    .checkbox-container { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+    .checkbox-container input { display: none; }
+    .checkbox-custom { width: 18px; height: 18px; border: 2px solid var(--border-color); border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: var(--transition); }
+    .checkbox-container input:checked + .checkbox-custom { background-color: var(--primary-color); border-color: var(--primary-color); }
+    .checkbox-container input:checked + .checkbox-custom i { display: block; }
+    .checkbox-custom i { color: white; font-size: 12px; display: none; }
+    .checkbox-label { font-size: 0.9rem; user-select: none; }
+
+    /* Toast Messages */
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+    .toast { padding: 1rem; border-radius: var(--radius); background-color: var(--secondary-bg); box-shadow: var(--shadow); display: flex; align-items: center; gap: 0.75rem; min-width: 300px; max-width: 400px; animation: slideIn 0.3s ease, fadeOut 0.5s ease 2.5s forwards; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+    .toast-icon { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; font-size: 1rem; }
+    .toast-info .toast-icon { background-color: var(--tertiary-bg); color: var(--highlight); }
+    .toast-success .toast-icon { background-color: var(--tertiary-bg); color: var(--success); }
+    .toast-error .toast-icon { background-color: var(--tertiary-bg); color: var(--error); }
+    .toast-warning .toast-icon { background-color: var(--tertiary-bg); color: var(--warning); }
+    .toast-content { flex: 1; }
+    .toast-title { font-weight: 600; margin-bottom: 0.25rem; }
+    .toast-message { font-size: 0.85rem; color: var(--text-secondary); }
+    .toast-close { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 1rem; }
+    .toast-close:hover { color: var(--text-primary); }
+
+    /* Transcribe Button Container */
+    .transcribe-button-container { text-align: center; margin-top: 2rem; padding: 1rem; background-color: var(--primary-bg); border: 1px solid var(--border-color); border-radius: var(--radius); box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); order: 100; }
+
+    /* Media Queries */
+    @media (max-width: 1600px) {
+      .input-panel-content { flex-direction: column; }
+      .settings-column { height: auto; overflow: visible; flex-direction: column; }
+      .transcript-controls { flex-direction: column; }
+      .transcript-tabs { width: 100%; align-items: center; padding-bottom: 0.5em; }
+    }
+
+    @media (max-width: 1200px) {
+      .app-container { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
+      .sidebar { display: none; }
+      .sidebar-toggle { display: block; }
+      .input-panel-content { flex-direction: column; }
+      .settings-column { height: auto; overflow: visible; flex-direction: column; }
+    }
+    @media (max-width: 992px) {
+      .main-container { flex-direction: column; height: auto; overflow-y: auto; /* Allow sction scroll */ }
+      .input-panel { height: auto; border-right: none; border-bottom: 1px solid var(--border-color); overflow-y: visible;  }
+      .output-panel { height: auto; overflow-y: visible; }
+      .settings-panel { overflow-y: visible; flex: initial; } /* Reset for mobile */
+      .transcript-panel { height: 400px; overflow-y: auto; } /* Allow transcript scroll */
+      .progress-container { margin-top: 0.75rem; } /* Adjust spacing on mobile */
+    }
+    @media (min-width: 993px) {
+        .settings-column {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .settings-panel {
+            flex: 1;
+            overflow-y: auto; /* Allow section scroll */
+            padding-bottom: 1rem; /* Space before sticky button */
+        }
+        .transcribe-button-container {
+            flex-shrink: 0;
+            position: sticky;
+            bottom: 0;
+            padding: 1rem 0;
+            margin-top: 0;
+            border-top: 1px solid var(--border-color);
+            z-index: 5;
+        }
+    }
+    @media (max-width: 768px) {
+      .model-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 576px) {
+      .model-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* Toggle switch styles */
+    .toggle-container { position: relative; display: inline-block; width: 40px; height: 20px; }
+    .toggle-container input { opacity: 0; width: 0; height: 0; }
+    .toggle-track { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); border-radius: 34px; transition: var(--transition); }
+    .toggle-indicator { position: absolute; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; border-radius: 50%; transition: var(--transition); }
+    input:checked + .toggle-track { background-color: var(--primary-color); }
+    input:checked + .toggle-track .toggle-indicator { transform: translateX(20px); }
+
+    /* Utility */
+    .spacer { flex: 1; }
+
+    /* GitHub */
+    .github-section { margin-top: auto !important; border-top: 1px solid var(--border-color); padding-top: 1rem; }
+
+    /* Price Calculator */
+    .price-details { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+    .price-row { display: flex; justify-content: space-between; font-size: 0.9rem; }
+    .price-label { color: var(--text-secondary); }
+    .price-value { font-weight: 500; color: var(--text-primary); }
+    .total-cost-row { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color); font-weight: 600; }
+
+    /* Topics */
+    .topic-tag { display: inline-block; background-color: var(--tertiary-bg); color: var(--text-primary); padding: 0.3rem 0.7rem; border-radius: 1rem; margin-right: 0.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 500; border: 1px solid var(--border-color); }
+
+    /* Unified Button/Tab Style */
+    .button-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .button-tab {
+      background: none; 
+      border: 1px solid transparent; 
+      color: var(--text-secondary);
+      font-size: 0.9rem; 
+      font-weight: 500; 
+      padding: 0.3rem 0.6rem; 
+      border-radius: var(--radius);
+      cursor: pointer; 
+      transition: var(--transition);
+      text-align: center;
+    }
+    .button-tab:hover { 
+      color: var(--text-primary); 
+      background-color: var(--tertiary-bg); 
+    }
+    .button-tab.active { 
+      color: var(--primary-dark); 
+      background-color: var(--tertiary-bg); 
+      font-weight: 600; 
+      border-color: var(--primary-color); 
+    }
+
+    /* Home option styles */
+    .home-option { margin-bottom: 1rem; }
+
+    .typewriter-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+    #headerTypewriterContainer { pointer-events: none; opacity: 0; transition: opacity 0.3s ease-in-out; z-index: 1; }
+    #headerTypewriterContainer .typewriter-letter { 
+      color: var(--primary-color);
+      opacity: 0; 
+      animation: matrixFade 2.5s ease-in-out forwards; 
+    }
+    @keyframes matrixFade { 
+      0% { opacity: 0; transform: scale(0.8); } 
+      40% { opacity: 0.7; transform: scale(1); } 
+      70% {    transform: scale(1.1); }
+      100% { opacity: 0; transform: scale(1.2); } 
+    }
+
+    /* Styling for the active model section in the Model Info panel */
+    .sidebar-section.active-model {
+      background-color: var(--tertiary-bg);
+      border-radius: var(--radius);
+      border-left: 3px solid var(--primary-color);
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="logo">
+        <a href="javascript:void(0)" onclick="window.location.reload()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path fill="var(--primary-color)" d="M4.998 15v4h4v2h-6v-6zm16 0v6h-6v-2h4v-4zm-8-9v12h-2V6zm-4 3v6h-2V9zm8 0v6h-2V9zm-8-6v2h-4v4h-2V3zm12 0v6h-2V5h-4V3z"/></svg>
+          <h1>Kaira <span class="highlight-text">Transcribe</span> Panel</h1>
+        </a>
+      </div>
+      <div class="typewriter-container" id="headerTypewriterContainer"></div>
+    </header>
+
+    <aside class="sidebar">
+      <div class="home-option">
+        <div class="button-tabs">
+          <button class="button-tab active" id="homeBtnMain" data-content="main">Home</button>
+          <button class="button-tab" id="homeBtnModelInfo" data-content="model-info">Model Info</button>
+        </div>
+      </div>
+
+      <!-- Sodebar Model Info Content -->
+      <div id="modelInfoContent" style="display: none;">
+        <div class="sidebar-section">
+          <h2>Local Models (Whisper)</h2>
+        </div>
+
+        <div class="sidebar-section">
+          <p>Whisper is OpenAI's open-source general-purpose speech recognition model. The available local models offer tradeoffs between transcription accuracy and processing speed. For an in-depth overview, refer to the <a href="https://github.com/openai/whisper" target="_blank"><i class="ri-external-link-line"></i> Whisper Documentation</a>.</p>
+        </div>
+
+        <div class="sidebar-section">
+          <h3 data-model="tiny"><i class="ri-speed-mini-line"></i> Tiny</h3>
+          <ul>
+            <li>Fastest, but least accurate.</li>
+            <li>VRAM req. ~1 GB</li>
+            <li>Parameters: 39 M</li>
+          </ul>
+        </div>
+        
+        <div class="sidebar-section">
+          <h3 data-model="base"><i class="ri-scales-line"></i> Base</h3>
+          <ul>
+            <li>Enhanced accuracy over Tiny.</li>
+            <li>VRAM req. ~1 GB</li>
+            <li>Parameters: 74 M</li>
+          </ul>
+        </div>
+        
+        <div class="sidebar-section">
+          <h3 data-model="small"><i class="ri-speed-up-line"></i> Small</h3>
+          <ul>
+            <li>Balanced speed and performance.</li>
+            <li>VRAM req. ~2 GB</li>
+            <li>Parameters: 244 M</li>
+          </ul>
+        </div>
+        
+        <div class="sidebar-section">
+          <h3 data-model="medium"><i class="ri-focus-3-line"></i> Medium</h3>
+          <ul>
+            <li>Improved nuance and accent handling.</li>
+            <li>VRAM req. ~4 GB</li>
+            <li>Parameters: 769 M</li>
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3 data-model="turbo"><i class="ri-rocket-line"></i> Turbo</h3>
+          <ul>
+            <li>Second best quality.</li>
+            <li>VRAM req. ~6 GB</li>
+            <li>Parameters: 809 M</li>
+          </ul>
+        </div>
+        
+        <div class="sidebar-section">
+          <h3 data-model="large"><i class="ri-cpu-line"></i> Large</h3>
+          <ul>
+            <li>Best quality, but very slow. A regular computer may struggle to run this.</li>
+            <li>VRAM req. ~10 GB</li>
+            <li>Parameters: 1550 M</li>
+          </ul>
+        </div>
+
+        <div class="sidebar-section" style="margin-top: 1em;">
+          <h2>Cloud Models</h2>
+        </div>
+        
+        <div class="sidebar-section">
+          <h3 data-model="whisper-1"><i class="ri-openai-fill"></i> Whisper-1<i class="ri-external-link-line" style="float: right; opacity: 0.7; cursor: pointer;" title="Whisper Cloud Documentation" onclick="window.open('https://platform.openai.com/docs/guides/speech-to-text', '_blank');"></i></h3>
+          <p>OpenAI's cloud-based Whisper transcription model that provides high-quality transcription through their API.</p>
+          <p style="margin-top: 0.5em;">Offers $5 free (API) credits (~14 hours of transcription).</p>
+        </div>
+        
+        <div class="sidebar-section">
+          <h3 data-model="nova-3"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M11.203 24H1.517a.364.364 0 0 1-.258-.62l6.239-6.275a.37.37 0 0 1 .259-.108h3.52c2.723 0 5.025-2.127 5.107-4.845a5.004 5.004 0 0 0-4.999-5.148H7.613v4.646c0 .2-.164.364-.365.364H.968a.365.365 0 0 1-.363-.364V.364C.605.164.768 0 .969 0h10.416c6.684 0 12.111 5.485 12.01 12.187C23.293 18.77 17.794 24 11.202 24z"/></svg> Nova-3<i class="ri-external-link-line" style="float: right; opacity: 0.7; cursor: pointer;" title="Nova-3 Documentation" onclick="window.open('https://developers.deepgram.com/docs/models-languages-overview', '_blank');"></i></h3>
+          <p>Deepgram's cloud-based transcription model with multi-language support. Offers advanced AI features like summarization and topic detection for English content.</p>
+          <p style="margin-top: 0.5em;">Offers $200 free (API) credits (~640 hours of transcription).</p>
+        </div>
+        
+        <div class="sidebar-section">
+          <h3 data-model="gladia"><i class="ri-voiceprint-fill"></i> Gladia<i class="ri-external-link-line" style="float: right; opacity: 0.7; cursor: pointer;" title="Gladia Documentation" onclick="window.open('https://docs.gladia.io/chapters/introduction/introduction', '_blank');"></i></h3>
+          <p>Gladia's cloud-based transcription service optimized for English content. Provides accurate transcription through their API service. Requires a Gladia API key.</p>
+          <p style="margin-top: 0.5em;">Offers 10 hours of free (API) credits per month.</p>
+        </div>
+      </div>
+
+      <!-- Main sidebar content -->
+      <div id="mainContent">
+        <div class="sidebar-section">
+          <h2>About Kaira</h2>
+          <p>Kaira Transcribe Panel is an interface for local and cloud transcription models. Compare each model's output speed, quality and pricing. Transcripts remain in your browser's cache temporarily and will disappear if you refresh or close the page, so be sure to save your transcript.</p>
+        </div>
+
+        <div class="sidebar-section">
+          <h2>Settings</h2>
+          <div class="options-title">
+            <h3 style="color: var(--text-primary);">Notifications</h3>
+            <div class="spacer"></div>
+            <label class="toggle-container">
+              <input type="checkbox" id="notifyToggle">
+              <span class="toggle-track"><span class="toggle-indicator"></span></span>
+            </label>
+          </div>
+          <p class="notification-hint">Enable browser notifications when transcription is ready</p>
+          <div class="theme-option" style="margin-top: 1rem;">
+            <div class="options-title"><h3 style="color: var(--text-primary);">Theme</h3></div>
+            <div class="button-tabs">
+              <button class="button-tab" id="themeBtnLight" data-theme="light">E Ink</button>
+              <button class="button-tab" id="themeBtnNova" data-theme="nova">Nova</button>
+              <button class="button-tab" id="themeBtnMinty" data-theme="minty">Minty</button>
+              <button class="button-tab" id="themeBtnToffee" data-theme="Toffee">Toffee</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <h2>Statistics</h2>
+          <div id="transcriptionStats" class="stats">
+            <div class="stat-item"><div class="stat-label">Words</div><div class="stat-value">0</div></div>
+            <div class="stat-item"><div class="stat-label">Characters</div><div class="stat-value">0</div></div>
+            <div class="stat-item"><div class="stat-label">Paragraphs</div><div class="stat-value">0</div></div>
+            <div class="stat-item"><div class="stat-label">Elapsed Time</div><div class="stat-value" id="elapsedTimeValue">0s</div></div>
+          </div>
+          <div id="statsLoading" class="stats-loading" style="display: none;"><span>Calculating</span><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><defs><filter id="svgSpinnersGooeyBalls20"><feGaussianBlur in="SourceGraphic" result="y" stdDeviation="1"/><feColorMatrix in="y" result="z" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 18 -7"/><feBlend in="SourceGraphic" in2="z"/></filter></defs><g filter="url(#svgSpinnersGooeyBalls20)"><circle cx="5" cy="12" r="4" fill="currentColor"><animate attributeName="cx" calcMode="spline" dur="2s" keySplines=".36,.62,.43,.99;.79,0,.58,.57" repeatCount="indefinite" values="5;8;5"/></circle><circle cx="19" cy="12" r="4" fill="currentColor"><animate attributeName="cx" calcMode="spline" dur="2s" keySplines=".36,.62,.43,.99;.79,0,.58,.57" repeatCount="indefinite" values="19;16;19"/></circle><animateTransform attributeName="transform" dur="0.75s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12;360 12 12"/></g></svg></div>
+        </div>
+
+        <div class="sidebar-section github-section">
+          <div style="display: flex; justify-content: center;">
+            <a href="https://github.com/kairauser/KairaTranscribePanel" target="_blank" class="btn btn-primary"><i class="ri-github-fill"></i><span>GitHub</span></a>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-container">
+      <div class="input-panel">
+        <form id="localForm">
+          <div class="input-panel-content">
+            <div class="files-column">
+              <div class="dropzone" id="dropZone">
+                <i class="ri-upload-cloud-2-line"></i>
+                <div class="dropzone-title">Drop audio or video files here</div>
+                <div class="dropzone-desc">Or click to browse your files</div>
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('local_file').click()">Select Files</button>
+                <input type="file" id="local_file" name="file" accept="audio/*,video/*" multiple>
+              </div>
+              <div class="file-list">
+                <div class="file-list-header">
+                  <div class="file-list-title"><i class="ri-file-list-3-line"></i><span>File Queue</span><span class="file-count">0 files</span></div>
+                  <div class="file-list-actions">
+                    <button type="button" class="btn btn-sm btn-secondary" id="selectAllFiles"><i class="ri-checkbox-multiple-line"></i><span>Select All</span></button>
+                    <button type="button" class="btn btn-sm btn-danger" id="clearQueue" disabled><i class="ri-delete-bin-line"></i><span>Clear</span></button>
+                  </div>
+                </div>
+                <div id="fileQueue" class="queue-container">
+                </div>
+                <div class="progress-container" id="progressContainer">
+                    <div class="progress-bar" id="progressBar"></div>
+                    <div class="progress-info"><span id="progressMessage">Processing...</span><span id="progressPercent">0%</span></div>
+                  </div>
+              </div>
+            </div>
+            <div class="settings-column">
+              <div class="settings-panel"> <!-- This panel scrolls -->
+                <div class="settings-title"><i class="ri-settings-3-line"></i><h2>Model Settings</h2></div>
+                <div class="model-options">
+                  <div class="options-title"><i class="ri-computer-line"></i><h3>Local Models (Whisper)</h3></div>
+                  <div class="model-grid">
+                    <div class="model-option"><input type="radio" name="model_option" id="tiny" value="tiny" checked><label for="tiny"><i class="ri-speed-mini-line model-icon"></i><div class="model-name">Tiny</div><div class="model-desc">Fast, low memory</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="base" value="base"><label for="base"><i class="ri-scales-line model-icon"></i><div class="model-name">Base</div><div class="model-desc">Balanced</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="small" value="small"><label for="small"><i class="ri-speed-up-line model-icon"></i><div class="model-name">Small</div><div class="model-desc">Better accuracy</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="medium" value="medium"><label for="medium"><i class="ri-focus-3-line model-icon"></i><div class="model-name">Medium</div><div class="model-desc">High accuracy</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="turbo" value="turbo"><label for="turbo"><i class="ri-rocket-line model-icon"></i><div class="model-name">Turbo</div><div class="model-desc">Fast & accurate</div></label></div> <!-- Removed NEW badge -->
+                    <div class="model-option"><input type="radio" name="model_option" id="large" value="large"><label for="large"><i class="ri-cpu-line model-icon"></i><div class="model-name">Large</div><div class="model-desc">Highest accuracy</div></label></div>
+                  </div>
+                </div>
+                <div class="model-options">
+                  <div class="options-title"><i class="ri-cloud-line"></i><h3>Cloud Models</h3></div>
+                  <div class="model-grid">
+                    <div class="model-option"><input type="radio" name="model_option" id="whisper-1" value="whisper-1"><label for="whisper-1"><i class="ri-openai-fill model-icon"></i><div class="model-name">Whisper-1</div><div class="model-desc">OpenAI API</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="nova-3" value="nova-3"><label for="nova-3"><svg class="model-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="30" viewBox="0 0 24 24"><path fill="currentColor" d="M11.203 24H1.517a.364.364 0 0 1-.258-.62l6.239-6.275a.37.37 0 0 1 .259-.108h3.52c2.723 0 5.025-2.127 5.107-4.845a5.004 5.004 0 0 0-4.999-5.148H7.613v4.646c0 .2-.164.364-.365.364H.968a.365.365 0 0 1-.363-.364V.364C.605.164.768 0 .969 0h10.416c6.684 0 12.111 5.485 12.01 12.187C23.293 18.77 17.794 24 11.202 24z"/></svg><div class="model-name">Nova-3</div><div class="model-desc">Deepgram API</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="gladia" value="gladia"><label for="gladia"><i class="ri-voiceprint-fill model-icon"></i><div class="model-name">Gladia (En)</div><div class="model-desc">Gladia API</div></label></div>
+                  </div>
+                </div>
+                <div class="api-key-section" id="apiKeySection">
+                  <div class="options-title"><i class="ri-key-2-line"></i><h3>OpenAI API Key</h3></div>
+                  <div class="api-key-input"><input type="password" id="api_key_cloud" name="api_key" placeholder="Enter your OpenAI API key" class="input"><button type="button" class="btn btn-secondary" id="showApiKey"><i class="ri-eye-line"></i></button></div>
+                   <div class="api-key-header">
+                     <h4>How do I get an OpenAI API key?</h4>
+                     <button type="button" class="api-key-toggle"><i class="ri-arrow-down-s-line"></i></button>
+                   </div>
+                  <div class="api-key-instructions">
+                    <ol>
+                      <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">platform.openai.com/api-keys</a></li>
+                      <li>Create an account or sign in</li>
+                      <li>Click "Create new secret key"</li>
+                      <li>Give it a name (e.g., "Kaira")</li>
+                      <li>Copy and paste your API key to the input field above</li>
+                    </ol>
+                    <p class="small-note">Use a secure password manager to store your API key. Avoid saving it in the browser unless you understand the risks.</p>
+                  </div>
+                </div>
+                <div class="api-key-section" id="deepgramApiKeySection" style="display: none;">
+                  <div class="options-title"><i class="ri-key-2-line"></i><h3>Deepgram API Key</h3></div>
+                  <div class="api-key-input"><input type="password" id="deepgram_api_key" name="deepgram_api_key" placeholder="Enter your Deepgram API key" class="input"><button type="button" class="btn btn-secondary" id="showDeepgramApiKey"><i class="ri-eye-line"></i></button></div>
+                  <div class="api-key-header">
+                     <h4>How do I get a Deepgram API key?</h4>
+                     <button type="button" class="api-key-toggle"><i class="ri-arrow-down-s-line"></i></button>
+                  </div>
+                  <div class="api-key-instructions">
+                    <ol>
+                      <li>Go to <a href="https://console.deepgram.com/signup" target="_blank" rel="noopener noreferrer">console.deepgram.com</a></li>
+                      <li>Create an account or sign in.</li>
+                      <li>Navigate to the "API Keys" section.</li>
+                      <li>Click "Create a New API Key".</li>
+                      <li>Give it a name (e.g., "Kaira") and copy the key.</li>
+                      <li>Paste your key here.</li>
+                    </ol>
+                    <p class="small-note">Use a secure password manager to store your API key. Avoid saving it in the browser unless you understand the risks.</p>
+                  </div>
+                </div>
+                <div class="api-key-section" id="gladiaApiKeySection" style="display: none;">
+                  <div class="options-title"><i class="ri-key-2-line"></i><h3>Gladia API Key</h3></div>
+                  <div class="api-key-input"><input type="password" id="gladia_api_key" name="gladia_api_key" placeholder="Enter your Gladia API key" class="input"><button type="button" class="btn btn-secondary" id="showGladiaApiKey"><i class="ri-eye-line"></i></button></div>
+                   <div class="api-key-header">
+                     <h4>How do I get a Gladia API key?</h4>
+                     <button type="button" class="api-key-toggle"><i class="ri-arrow-down-s-line"></i></button>
+                   </div>
+                   <div class="api-key-instructions">
+                    <ol>
+                        <li>Go to <a href="https://app.gladia.io/register" target="_blank" rel="noopener noreferrer">app.gladia.io</a></li>
+                        <li>Create an account or sign in.</li>
+                        <li>Navigate to the "API keys" section in your settings.</li>
+                        <li>Click "Generate new key".</li>
+                        <li>Copy the key immediately and paste it here.</li>
+                    </ol>
+                    <p class="small-note">Use a secure password manager to store your API key. Avoid saving it in the browser unless you understand the risks.</p>
+                   </div>
+                </div>
+                <div id="deepgramOptions" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                  <div class="options-title"><i class="ri-robot-line"></i><h3>Deepgram AI Features (English Only)</h3></div>
+                  <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+                    <label class="checkbox-container" style="font-size: 0.9rem;"><input type="checkbox" id="deepgram_summarize"><span class="checkbox-custom"><i class="ri-check-line"></i></span><h4>Summarization</h4></label>
+                    <p class="api-key-hint" id="summarizeHint" style="margin-top: -0.5rem; margin-left: 2rem; display: none; color: var(--text-secondary); font-size: 0.9rem;">Short summary for fast insight.</p>
+                    <label class="checkbox-container" style="margin-top: 0.5rem; font-size: 0.9rem;"><input type="checkbox" id="deepgram_topics"><span class="checkbox-custom"><i class="ri-check-line"></i></span><h4>Topic Detection</h4></label>
+                    <p class="api-key-hint" id="topicsHint" style="margin-top: -0.5rem; margin-left: 2rem; display: none; color: var(--text-secondary); font-size: 0.9rem;">Labels main topics for quick understanding.</p>
+                    </div>
+                </div>
+                 <!-- Price Calculator Section -->
+                 <div id="priceCalculator" style="display: none; margin-top: 1.5rem; padding: 1rem; background-color: var(--secondary-bg); border-radius: var(--radius); border: 1px solid var(--border-color);">
+                    <div class="options-title"><h4>Estimated API Call Cost</h4><a id="pricingDocLink" href="#" target="_blank" style="margin-left: auto; color: var(--text-tertiary); cursor: pointer;" title="Pricing model"><i class="ri-question-line" style="opacity: 0.7;"></i></a></div>
+                    <div class="price-details">
+                        <div class="price-row" id="fileDurationRow"><span class="price-label">File Duration:</span><span class="price-value" id="fileDuration">N/A</span></div>
+                        <div class="price-row" id="apiPricingRow"><span class="price-label" id="apiPricingLabel">API Base Cost:</span><span class="price-value" id="apiPricingValue">N/A</span></div>
+                        <div class="price-row" id="summarizationCostRow" style="display: none;"><span class="price-label">Summarization:</span><span class="price-value" id="summarizationCostValue">$0.00</span></div>
+                        <div class="price-row" id="topicDetectionCostRow" style="display: none;"><span class="price-label">Topic Detection:</span><span class="price-value" id="topicDetectionCostValue">$0.00</span></div>
+                        <div class="price-row total-cost-row"><span class="price-label">Total Estimated:</span><span class="price-value" id="estimatedCost">$0.00</span></div>
+                    </div>
+                </div>
+              </div> <!-- End .settings-panel (scrollable part) -->
+
+              <!-- Transcribe Button outside settings-panel for sticky bottom effect -->
+              <div class="transcribe-button-container">
+                <button type="submit" class="btn btn-primary btn-large" id="transcribeButton" disabled><i class="ri-draft-line"></i><span>Transcribe</span></button>
+              </div>
+
+            </div> <!-- End .settings-column -->
+          </div> <!-- End .input-panel-content -->
+
+          <input type="hidden" id="job_id" name="job_id" value="">
+        </form>
+      </div><!-- End .input-panel -->
+
+      <div class="output-panel">
+        <div class="preview-panel">
+          <div class="preview-title">
+            <div class="preview-title-text"><i class="ri-play-circle-line"></i><h2>Media Preview</h2></div>
+            <div class="preview-options">
+              <button type="button" class="btn btn-sm btn-secondary" id="showVideo" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="4"/><path d="m15 12l-5-3v6z"/></g></svg><span>Video</span></button>
+              <button type="button" class="btn btn-sm btn-secondary" id="showWaveform" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="m22 12l-2 1l-1 1l-1-1l-1 3l-1-3l-1 8l-1-8l-1 2l-1-2l-1 4l-1-4l-1 9l-1-9l-1 6l-1-6l-1 1l-1-1l-2-1l2-1l1-1l1 1l1-6l1 6l1-9l1 9l1-4l1 4l1-2l1 2l1-8l1 8l1-3l1 3l1-1l1 1z"/></svg><span>Waveform</span></button>
+            </div>
+          </div>
+          <video id="previewPlayer" class="preview-player" controls></video>
+          <div id="audioPlayer" class="waveform-container">
+            <div class="controls"><button id="playPauseButton" class="play-btn"><i class="ri-play-fill"></i></button></div>
+            <div id="waveform" class="wave-wrapper"><div class="time-display"><span class="time-left">0:00</span><span class="time-center"></span><span class="time-right">0:00</span></div></div>
+          </div>
+        </div>
+        <div class="transcript-panel">
+          <div class="transcript-header">
+            <div class="transcript-title"><i class="ri-file-text-line"></i><h2>Transcript</h2></div>
+            <div class="transcript-controls">
+              <div class="transcript-tabs">
+                <button type="button" class="button-tab active" data-tab="default">Default</button>
+                <button type="button" class="button-tab" data-tab="numbered">#</button>
+                <button type="button" class="button-tab" data-tab="srt">SRT</button>
+                <button type="button" class="button-tab" data-tab="vtt">VTT</button>
+                <button type="button" class="button-tab" data-tab="tsv">TSV</button>
+                <button type="button" class="button-tab" data-tab="summary" style="display: none;">Summary</button>
+                <button type="button" class="button-tab" data-tab="topics" style="display: none;">Topics</button>
+              </div>
+              <div class="transcript-actions">
+                <button type="button" class="btn btn-sm btn-secondary" id="fontDecreaseBtn" title="Decrease font size"><i class="ri-subtract-line"></i></button>
+                <button type="button" class="btn btn-sm btn-secondary" id="fontIncreaseBtn" title="Increase font size"><i class="ri-add-line"></i></button>
+                <button type="button" class="btn btn-sm btn-secondary" id="copyButton" disabled><i class="ri-clipboard-line"></i><span>Copy</span></button>
+                <button type="button" class="btn btn-sm btn-secondary" id="downloadButton" disabled><i class="ri-download-line"></i><span>Download</span></button>
+              </div>
+            </div>
+          </div>
+          <div class="transcript-content" id="defaultTranscript"><div class="transcript-body"></div><div class="loading-overlay" id="loadingOverlay" style="display: none;"><div class="typewriter-container" id="typewriterContainer"></div><div class="loading-message"><div class="loading-text">Processing Transcript</div><div class="loading-bars"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect width="2.8" height="12" x="1" y="6" fill="currentColor"><animate id="svgSpinnersBarsScale0" attributeName="y" begin="0;svgSpinnersBarsScale1.end-0.1s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="6;1;6"/><animate attributeName="height" begin="0;svgSpinnersBarsScale1.end-0.1s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="12;22;12"/></rect><rect width="2.8" height="12" x="5.8" y="6" fill="currentColor"><animate attributeName="y" begin="svgSpinnersBarsScale0.begin+0.1s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="6;1;6"/><animate attributeName="height" begin="svgSpinnersBarsScale0.begin+0.1s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="12;22;12"/></rect><rect width="2.8" height="12" x="10.6" y="6" fill="currentColor"><animate attributeName="y" begin="svgSpinnersBarsScale0.begin+0.2s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="6;1;6"/><animate attributeName="height" begin="svgSpinnersBarsScale0.begin+0.2s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="12;22;12"/></rect><rect width="2.8" height="12" x="15.4" y="6" fill="currentColor"><animate attributeName="y" begin="svgSpinnersBarsScale0.begin+0.3s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="6;1;6"/><animate attributeName="height" begin="svgSpinnersBarsScale0.begin+0.3s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="12;22;12"/></rect><rect width="2.8" height="12" x="20.2" y="6" fill="currentColor"><animate id="svgSpinnersBarsScale1" attributeName="y" begin="svgSpinnersBarsScale0.begin+0.4s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="6;1;6"/><animate attributeName="height" begin="svgSpinnersBarsScale0.begin+0.4s" calcMode="spline" dur="0.6s" keySplines=".36,.61,.3,.98;.36,.61,.3,.98" values="12;22;12"/></rect></svg></div></div></div></div>
+          <div class="transcript-content" id="numberedTranscript" style="display: none;"><div class="transcript-body"></div></div>
+          <div class="transcript-content" id="srtTranscript" style="display: none;"><div class="transcript-body"></div></div>
+          <div class="transcript-content" id="vttTranscript" style="display: none;"><div class="transcript-body"></div></div>
+          <div class="transcript-content" id="tsvTranscript" style="display: none;"><div class="transcript-body"></div></div>
+          <div class="transcript-content" id="summaryTranscript" style="display: none;"><h2>Summary</h2><div class="transcript-body" style="white-space: pre-wrap; margin-top: 1rem;"></div></div>
+          <div class="transcript-content" id="topicsTranscript" style="display: none;"><h2>Detected Topics</h2><div class="transcript-body" style="margin-top: 1rem;"></div></div>
+        </div>
+      </div><!-- End .output-panel -->
+    </div> <!-- End .main-container -->
+  </div> <!-- End .app-container -->
+
+  <div class="toast-container">
+      <!-- Toasts appear here (display temporary notifications) -->
+  </div>
+
+  <script src="https://unpkg.com/wavesurfer.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    // --- Global Variables ---
+    let fileQueue = [];
+    let currentProcessingIndex = -1;
+    let fileResults = {}; // Holds the *currently displayed* result for a file ID
+    let savedTranscriptionsByFile = {}; // Holds *all* results for a file ID, keyed by model
+    let completedModelsByFile = {}; // Tracks which models finished for a file ID
+    let currentActiveFile = null; // ID of the file selected in the UI
+    let activeProcessingQueue = []; // Files currently being processed in a batch
+    let currentUploadedFile = null; // Temp holder during upload
+    let generationInProgress = false; // Flag if backend is busy
+    let wavesurfer; // For audio preview
+    let videoWavesurfer; // Separate instance for video audio waveform
+    let currentPreviewedFile = null; // Stores { id, type, objectURL, wavesurferInstance (for video) }
+    let progressInterval;
+    let socket = null;
+    let isCancelled = false; // Flag for user cancellation
+    let currentFontSize = 16;
+    let typewriterInterval = null;
+    let currentFileDuration = 0; // Duration of the selected file
+
+    // Update Deepgram pricing constants to token-based model
+    // $0.0003/1k input tokens and $0.0006/1k output tokens
+    const DEEPGRAM_INPUT_TOKEN_COST = 0.0003 / 1000;  // Cost per input token
+    const DEEPGRAM_OUTPUT_TOKEN_COST = 0.0006 / 1000; // Cost per output token
+    // Estimate average words per minute in audio
+    const AVG_WORDS_PER_MINUTE = 150;
+    // Estimate average tokens per word (for input/output calculations)
+    const AVG_TOKENS_PER_WORD = 1.3;
+    // Estimate summary output length as percentage of input
+    const SUMMARY_OUTPUT_PERCENTAGE = 0.2; // 20% of input length
+
+    // --- DOM Elements ---
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('local_file');
+    const fileQueueEl = document.getElementById('fileQueue');
+    const transcribeButton = document.getElementById('transcribeButton');
+    const copyButton = document.getElementById('copyButton');
+    const downloadButton = document.getElementById('downloadButton');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressMessage = document.getElementById('progressMessage');
+    const progressPercent = document.getElementById('progressPercent');
+    const apiKeySection = document.getElementById('apiKeySection');
+    const previewPlayer = document.getElementById('previewPlayer');
+    const audioPlayerContainer = document.getElementById('audioPlayer'); // Div containing audio controls + waveform
+    const waveformEl = document.getElementById('waveform'); // Div specifically for waveform rendering
+    const playPauseButton = document.getElementById('playPauseButton'); // Single button for both audio/video waveform
+    const showVideoBtn = document.getElementById('showVideo');
+    const showWaveformBtn = document.getElementById('showWaveform');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const clearQueueBtn = document.getElementById('clearQueue');
+    const selectAllFilesBtn = document.getElementById('selectAllFiles');
+    const fileCountEl = document.querySelector('.file-count');
+    const localForm = document.getElementById('localForm');
+    const statsContainer = document.getElementById('transcriptionStats');
+    const statsLoading = document.getElementById('statsLoading');
+    const elapsedTimeValueEl = document.getElementById('elapsedTimeValue');
+    const deepgramOptionsDiv = document.getElementById('deepgramOptions');
+    const summarizeCheckbox = document.getElementById('deepgram_summarize');
+    const topicsCheckbox = document.getElementById('deepgram_topics');
+    const summaryTabBtn = document.querySelector('.button-tab[data-tab="summary"]');
+    const topicsTabBtn = document.querySelector('.button-tab[data-tab="topics"]');
+    const summaryTranscriptDiv = document.getElementById('summaryTranscript');
+    const topicsTranscriptDiv = document.getElementById('topicsTranscript');
+    const priceCalculatorDiv = document.getElementById('priceCalculator');
+    const fileDurationValue = document.getElementById('fileDuration');
+    const apiPricingLabel = document.getElementById('apiPricingLabel');
+    const apiPricingValue = document.getElementById('apiPricingValue');
+    const summarizationCostRow = document.getElementById('summarizationCostRow');
+    const summarizationCostValue = document.getElementById('summarizationCostValue');
+    const topicDetectionCostRow = document.getElementById('topicDetectionCostRow');
+    const topicDetectionCostValue = document.getElementById('topicDetectionCostValue');
+    const estimatedCostValue = document.getElementById('estimatedCost');
+    const deepgramApiKeySection = document.getElementById('deepgramApiKeySection');
+    const gladiaApiKeySection = document.getElementById('gladiaApiKeySection');
+
+    // --- Event Listeners ---
+    document.addEventListener('DOMContentLoaded', function() {
+      fileInput.addEventListener('change', handleFileSelection);
+      dropZone.addEventListener('dragover', handleDragOver);
+      dropZone.addEventListener('dragleave', handleDragLeave);
+      dropZone.addEventListener('drop', handleFileDrop);
+      localForm.addEventListener('submit', handleFormSubmit);
+      copyButton.addEventListener('click', copyTranscript);
+      downloadButton.addEventListener('click', downloadTranscript);
+      clearQueueBtn.addEventListener('click', clearQueue);
+      selectAllFilesBtn.addEventListener('click', selectAllFiles);
+      playPauseButton.addEventListener('click', togglePlayPause);
+      document.getElementById('fontDecreaseBtn').addEventListener('click', decreaseFontSize);
+      document.getElementById('fontIncreaseBtn').addEventListener('click', increaseFontSize);
+
+      // Theme Button Listeners
+      document.querySelectorAll('.button-tab[data-theme]').forEach(button => {
+        button.addEventListener('click', function() {
+          switchTheme(this.dataset.theme);
+        });
+      });
+      
+      // Home Button Listeners
+      document.querySelectorAll('.button-tab[data-content]').forEach(button => {
+        button.addEventListener('click', function() {
+          switchSidebarContent(this.dataset.content);
+        });
+      });
+
+      // Tab Button Listeners 
+      document.querySelectorAll('.button-tab[data-tab]').forEach(tab => tab.addEventListener('click', function() { switchTab(this.dataset.tab); }));
+      document.querySelectorAll('input[name="model_option"]').forEach(radio => radio.addEventListener('change', handleModelChange));
+      document.getElementById('showApiKey').addEventListener('click', toggleApiKeyVisibility);
+      document.getElementById('showDeepgramApiKey').addEventListener('click', function() { togglePasswordVisibility('deepgram_api_key', this); });
+      document.getElementById('showGladiaApiKey').addEventListener('click', function() { togglePasswordVisibility('gladia_api_key', this); });
+      document.getElementById('notifyToggle').addEventListener('change', requestNotificationPermission);
+      summarizeCheckbox.addEventListener('change', handleDeepgramFeatureChange);
+      topicsCheckbox.addEventListener('change', handleDeepgramFeatureChange);
+
+      // API Key Instruction Toggle Listeners
+      document.querySelectorAll('.api-key-header').forEach(header => {
+        header.addEventListener('click', function() {
+          const instructions = this.nextElementSibling;
+          const icon = this.querySelector('i');
+          const isVisible = instructions.style.display === 'block';
+          instructions.style.display = isVisible ? 'none' : 'block';
+          icon.className = isVisible ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line';
+        });
+      });
+
+      // Video/Waveform toggle buttons
+      showVideoBtn.addEventListener('click', showVideoPreview);
+      showWaveformBtn.addEventListener('click', showWaveformPreview);
+
+      connectSocket();
+      initializeTheme();
+      audioPlayerContainer.style.display = 'none'; // Hide audio container initially
+      updateTranscribeButtonText();
+      document.getElementById('job_id').value = 'job_' + Math.random().toString(36).substr(2, 9); // Initial Job ID
+      updatePriceCalculator(); // Initial call
+      handleModelChange(); // Initialize model highlighting in the Model Info panel
+    });
+
+    // --- File Handling ---
+    function handleFileSelection(e) { processSelectedFiles(e.target.files); }
+    function handleFileDrop(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('dragover'); processSelectedFiles(e.dataTransfer.files); }
+    function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('dragover'); }
+    function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('dragover'); }
+
+    function processSelectedFiles(fileList) {
+        if (!fileList || fileList.length === 0) return;
+        console.log(`Processing ${fileList.length} selected files.`);
+        progressContainer.classList.add('active'); // Show progress briefly
+        progressBar.style.width = "100%";
+        progressPercent.textContent = "100%";
+        setTimeout(() => progressContainer.classList.remove('active'), 500);
+
+        let lastAddedFileId = null;
+        let filesAddedCount = 0;
+        Array.from(fileList).forEach(file => {
+            // Basic validation
+            if (!file.type.startsWith('audio/') && !file.type.startsWith('video/')) {
+                 console.warn(`Skipping unsupported file type: ${file.name} (${file.type})`);
+                 showToast('warning', 'Unsupported File', `${file.name} has an unsupported type.`);
+                 return; // Skip this file
+            }
+            if (file.size > 500 * 1024 * 1024) { // Example: 500MB limit
+                 console.warn(`Skipping large file: ${file.name} (${formatFileSize(file.size)})`);
+                 showToast('warning', 'File Too Large', `${file.name} exceeds the size limit.`);
+                 return; // Skip this file
+            }
+
+            file.id = 'file_' + Math.random().toString(36).substr(2, 9);
+            file.selected = true; // Select new files by default
+            delete fileResults[file.id]; delete savedTranscriptionsByFile[file.id]; delete completedModelsByFile[file.id]; // Clear old data
+            fileQueue.push(file);
+            lastAddedFileId = file.id;
+            filesAddedCount++;
+        });
+
+        updateFileQueue(); // Update UI list
+
+        // Select and preview the last successfully added file
+        if (lastAddedFileId) {
+            currentActiveFile = lastAddedFileId;
+             const lastFile = fileQueue.find(f => f.id === lastAddedFileId);
+             if (lastFile) showFilePreview(lastFile);
+            updateFileQueue(); // Update again to show selection highlight
+        } else if (fileQueue.length > 0 && !currentActiveFile) {
+             // If queue wasn't empty but no file was active, select the first one
+             currentActiveFile = fileQueue[0].id;
+             showFilePreview(fileQueue[0]);
+             updateFileQueue();
+        }
+
+        clearQueueBtn.disabled = fileQueue.length === 0;
+        // Only show toast if some files were actually added
+        if(filesAddedCount > 0) showToast('success', 'Files Added', `Added ${filesAddedCount} file(s).`);
+        updateTranscribeButtonText();
+    }
+
+    // --- Socket Communication ---
+    function connectSocket() {
+      if (socket && socket.connected) {
+        const currentJobId = document.getElementById('job_id').value;
+        socket.emit('join', { job_id: currentJobId });
+        console.log("Socket already connected. Re-joining room:", currentJobId);
+        return;
+      }
+      socket = io({ reconnection: true, reconnectionAttempts: 5, reconnectionDelay: 1000, reconnectionDelayMax: 5000, timeout: 20000 });
+      socket.on('connect', () => {
+          console.log('Connected to server socket.io');
+          const currentJobId = document.getElementById('job_id').value;
+          socket.emit('join', { job_id: currentJobId });
+       });
+      socket.on('connect_error', (error) => { console.error('Connection error:', error); showToast('error', 'Connection Error', 'Cannot reach server.'); });
+      socket.on('disconnect', () => console.log('Disconnected from server'));
+      socket.on('joined', (data) => console.log('Joined room:', data.job_id));
+      setupSocketListeners();
+    }
+
+    function setupSocketListeners() {
+      socket.off('progress_update').on('progress_update', (data) => {
+        const currentJobId = document.getElementById('job_id').value;
+        if (data.job_id === currentJobId) {
+          console.log('Progress:', data.progress, data.message);
+          updateProgress(data.progress, data.message || 'Processing...');
+          if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
+            const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Safe access
+            if (fileId) updateFileQueueItemStatusById(fileId, `Processing: ${data.progress}%`);
+          }
+          if (data.progress < 100 && generationInProgress) {
+            transcribeButton.innerHTML = '<i class="ri-stop-circle-line"></i><span>Cancel</span>';
+          }
+        }
+      });
+
+      socket.off('transcription_complete').on('transcription_complete', (data) => {
+        console.log('Received transcription_complete:', data.job_id, data.model_option);
+        const currentJobId = document.getElementById('job_id').value;
+        if (data.job_id === currentJobId) {
+          if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
+            const currentFile = activeProcessingQueue[currentProcessingIndex];
+            if (currentFile && currentFile.id) { // Check if currentFile and its id exist
+              console.log(`Processing completion for file: ${currentFile.name}, model: ${data.model_option}`);
+              // Store results (both current view and persistent)
+              const resultData = {
+                fileName: currentFile.name, model: data.model_option, task: "transcribe",
+                language: data.language || "Unknown",
+                summary_text: data.summary_text || null, topics_data: data.topics_data || null,
+                srt_text: data.srt_text, default_transcript: data.default_transcript,
+                numbered_transcript: data.numbered_transcript, vtt_text: data.vtt_text,
+                tsv_text: data.tsv_text, tsv_plain: data.tsv_plain, plain_srt: data.plain_srt,
+                elapsed_time: data.elapsed_time // Store elapsed time
+              };
+              fileResults[currentFile.id] = resultData; // Update current view result cache
+              if (!savedTranscriptionsByFile[currentFile.id]) savedTranscriptionsByFile[currentFile.id] = {};
+              savedTranscriptionsByFile[currentFile.id][data.model_option] = resultData; // Store persistently by model
+              if (!completedModelsByFile[currentFile.id]) completedModelsByFile[currentFile.id] = [];
+              if (!completedModelsByFile[currentFile.id].includes(data.model_option)) completedModelsByFile[currentFile.id].push(data.model_option);
+
+              updateFileQueueItemStatusById(currentFile.id, '', true); // Mark as completed in UI
+              updateModelCompletionStatus(currentFile.id); // Update model done badges
+
+              if (currentActiveFile === currentFile.id) { // If this is the selected file, show results
+                showFileResult(currentFile.id);
+                 // Update stats including elapsed time AFTER showing result
+                 updateTranscriptionStats(resultData.default_transcript, resultData.elapsed_time);
+              }
+              if (document.getElementById('notifyToggle').checked) { showBrowserNotification(`Transcription Complete`, `${currentFile.name} processed.`); }
+
+              progressBar.style.width = "0%"; progressPercent.textContent = "0%"; // Reset progress bar
+              setTimeout(processNextFileInQueue, 300); // Move to next file
+            } else { console.warn("Completed event received but current file invalid in active queue."); processNextFileInQueue(); }
+          } else { console.warn("Completed event received but currentProcessingIndex is invalid."); processNextFileInQueue(); }
+        } else { console.log(`Ignoring completion for different job: ${data.job_id}`); }
+      });
+
+      socket.off('transcription_failed').on('transcription_failed', (data) => {
+         const currentJobId = document.getElementById('job_id').value;
+         if (data.job_id === currentJobId) {
+            console.error('Transcription failed:', data.error);
+            showToast('error', 'Transcription Failed', data.error);
+            if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
+                const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Safe access
+                 if (fileId) {
+                     updateFileQueueItemStatusById(fileId, 'Failed');
+                     const fileInQueue = fileQueue.find(f => f.id === fileId);
+                     if(fileInQueue) fileInQueue.error = true; // Mark file as errored
+                 }
+            }
+            generationInProgress = false; // Ensure processing stops on failure
+            // Don't reset UI here, let processNextFileInQueue handle moving on
+            setTimeout(processNextFileInQueue, 500); // Try next file after failure
+         }
+      });
+
+      socket.off('transcription_cancelled').on('transcription_cancelled', (data) => {
+        const currentJobId = document.getElementById('job_id').value;
+        if (data.job_id === currentJobId) {
+            console.log('Transcription cancelled by server for job:', data.job_id);
+            showToast('info', 'Transcription Cancelled', 'Process stopped.');
+            if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
+                const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Safe access
+                if (fileId) updateFileQueueItemStatusById(fileId, 'Cancelled');
+            }
+            resetTranscriptionUI(); // Fully reset UI and stop queue
+         }
+      });
+    }
+
+    // --- UI Update Functions ---
+    function updateFileQueue() {
+        const queueElement = document.getElementById('fileQueue'); queueElement.innerHTML = '';
+        fileCountEl.textContent = `${fileQueue.length} ${fileQueue.length === 1 ? 'file' : 'files'}`;
+        const showCheckboxes = fileQueue.length > 1;
+
+        fileQueue.forEach((file, index) => {
+            const fileItem = document.createElement('div'); fileItem.className = 'file-item';
+            if (currentActiveFile === file.id) fileItem.classList.add('selected');
+            if (file.error) fileItem.classList.add('failed'); // Use a class for visual indication
+            else if (completedModelsByFile[file.id]?.length > 0) fileItem.classList.add('completed');
+
+            const isProcessingThisFile = generationInProgress && activeProcessingQueue[currentProcessingIndex]?.id === file.id;
+            if (isProcessingThisFile) fileItem.classList.add('processing');
+
+            fileItem.dataset.index = index; fileItem.dataset.fileId = file.id;
+
+            fileItem.onclick = function() {
+                currentActiveFile = file.id;
+                updateFileQueue(); // Update selection highlight
+                showFilePreview(file); // This now handles cleanup of previous preview too
+                updateModelCompletionStatus(file.id);
+                const currentModel = document.querySelector('input[name="model_option"]:checked').value;
+                // Load specific model result into view cache if available
+                if (savedTranscriptionsByFile[file.id]?.[currentModel]) {
+                    fileResults[file.id] = savedTranscriptionsByFile[file.id][currentModel];
+                    showFileResult(file.id);
+                } else {
+                    // If no result for current model, clear display
+                    clearTranscriptDisplay();
+                    resetTranscriptionStats();
+                }
+                updatePriceCalculator();
+            };
+
+            const checkboxContainer = document.createElement('div'); checkboxContainer.className = 'file-checkbox';
+            
+            if (showCheckboxes) {
+                // Checkbox Button for each file
+                const checkboxBtn = document.createElement('button');
+                checkboxBtn.style.background = 'none';
+                checkboxBtn.style.border = 'none';
+                checkboxBtn.style.padding = '0';
+                checkboxBtn.style.width = '18px'; 
+                checkboxBtn.style.height = '18px';
+                checkboxBtn.style.cursor = 'pointer';
+
+                const checkboxVisual = document.createElement('div');
+                checkboxVisual.style.width = '18px';
+                checkboxVisual.style.height = '18px';
+                checkboxVisual.style.border = `2px solid var(--border-color)`;
+                checkboxVisual.style.borderRadius = '4px';
+                checkboxVisual.style.display = 'flex';
+                checkboxVisual.style.alignItems = 'center';
+                checkboxVisual.style.justifyContent = 'center';
+                checkboxVisual.style.transition = 'var(--transition)';
+                
+                if (file.selected !== false) {
+                    checkboxVisual.style.backgroundColor = 'var(--primary-color)';
+                    checkboxVisual.style.borderColor = 'var(--primary-color)';
+                    checkboxVisual.innerHTML = '<i class="ri-check-line" style="color: white; font-size: 12px;"></i>';
+                }
+                
+                // Add hover effect to clearly show it's clickable
+                checkboxBtn.onmouseover = function() {
+                    checkboxVisual.style.borderColor = 'var(--primary-color)';
+                    this.style.cursor = 'auto';
+                };
+                
+                checkboxBtn.onmouseout = function() {
+                    if (file.selected === false) {
+                        checkboxVisual.style.borderColor = 'var(--border-color)';
+                    }
+                };
+                
+                checkboxBtn.appendChild(checkboxVisual);
+                
+                // Click handler
+                checkboxBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    file.selected = !file.selected;
+                    updateFileQueue();
+                    updateTranscribeButtonText();
+                };
+                
+                checkboxContainer.appendChild(checkboxBtn);
+            }
+
+            const fileIcon = document.createElement('div'); 
+            fileIcon.className = 'file-icon'; 
+            if (file.type.startsWith('video/')) {
+                fileIcon.innerHTML = '<i class="ri-file-video-line"></i>';
+            } else {
+                fileIcon.innerHTML = '<i class="ri-file-music-line"></i>';
+            }
+
+            const contentContainer = document.createElement('div'); contentContainer.className = 'file-info';
+            const nameElement = document.createElement('div'); nameElement.className = 'file-name'; nameElement.textContent = file.name;
+            const statusElement = document.createElement('div'); statusElement.className = 'file-meta';
+            const sizeSpan = document.createElement('span'); sizeSpan.textContent = formatFileSize(file.size); statusElement.appendChild(sizeSpan);
+
+            let statusBadgeText = ''; let statusBadgeClass = '';
+            if (file.error) { statusBadgeText = 'Failed'; statusBadgeClass = 'failed'; }
+            else if (isProcessingThisFile) { statusBadgeText = 'Processing'; statusBadgeClass = 'processing'; }
+            else if (completedModelsByFile[file.id]?.length > 0) { statusBadgeText = 'Completed'; statusBadgeClass = 'completed'; }
+            else if (generationInProgress && activeProcessingQueue.some(f => f.id === file.id)) { statusBadgeText = 'Queued'; statusBadgeClass = 'idle'; }
+
+            if (statusBadgeText) { const statusBadge = document.createElement('span'); statusBadge.className = `file-status ${statusBadgeClass}`; statusBadge.textContent = statusBadgeText; statusElement.appendChild(statusBadge); }
+
+            contentContainer.appendChild(nameElement); contentContainer.appendChild(statusElement);
+
+            const modelsContainer = document.createElement('div'); modelsContainer.className = 'file-models';
+            if (completedModelsByFile[file.id]?.length > 0) { completedModelsByFile[file.id].forEach(model => { const modelTag = document.createElement('span'); modelTag.className = 'file-model'; modelTag.textContent = model; modelsContainer.appendChild(modelTag); }); }
+
+            const removeButton = document.createElement('button'); removeButton.className = 'file-actions'; removeButton.innerHTML = '<i class="ri-close-line"></i>'; removeButton.onclick = (e) => { e.stopPropagation(); removeFileFromQueue(index); };
+
+            fileItem.appendChild(checkboxContainer); fileItem.appendChild(fileIcon); fileItem.appendChild(contentContainer); fileItem.appendChild(modelsContainer); fileItem.appendChild(removeButton);
+
+            queueElement.appendChild(fileItem);
+        });
+        updateTranscribeButtonText();
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let i = 0;
+        while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+        return `${bytes.toFixed(1)} ${units[i]}`;
+    }
+
+    function updateFileQueueItemStatusById(fileId, statusText, isCompleted = false) {
+        const queueItem = document.querySelector(`.file-item[data-file-id="${fileId}"]`);
+        if (!queueItem) return;
+        queueItem.classList.remove('processing', 'completed', 'failed'); // Clear old status classes
+        const statusElement = queueItem.querySelector('.file-meta');
+        if (!statusElement) return;
+        let statusBadge = statusElement.querySelector('.file-status');
+
+        // Ensure badge exists if statusText or isCompleted is true
+        if (!statusBadge && (statusText || isCompleted)) {
+            statusBadge = document.createElement('span');
+            statusBadge.className = 'file-status';
+            // Append after the size span if possible
+            const sizeSpan = statusElement.querySelector('span:not(.file-status)');
+            if (sizeSpan && sizeSpan.nextSibling) {
+                 statusElement.insertBefore(statusBadge, sizeSpan.nextSibling);
+            } else {
+                 statusElement.appendChild(statusBadge);
+            }
+        } else if (statusBadge && !statusText && !isCompleted) {
+            statusBadge.remove(); // Remove badge if no status needed
+            // return; // Don't return early, might need to update model tags below
+        } else if (!statusBadge && isCompleted) { // Case where it was idle and now completed
+            statusBadge = document.createElement('span');
+            statusBadge.className = 'file-status';
+             const sizeSpan = statusElement.querySelector('span:not(.file-status)');
+             if (sizeSpan && sizeSpan.nextSibling) {
+                  statusElement.insertBefore(statusBadge, sizeSpan.nextSibling);
+             } else {
+                  statusElement.appendChild(statusBadge);
+             }
+        }
+
+         if (!statusBadge && !isCompleted) return; // Exit if no badge and not completed
+
+        // Update badge content and item class (only if badge exists)
+        if(statusBadge){
+             if (isCompleted) { statusBadge.className = 'file-status completed'; statusBadge.textContent = 'Completed'; queueItem.classList.add('completed'); }
+             else if (statusText === 'Failed') { statusBadge.className = 'file-status failed'; statusBadge.textContent = 'Failed'; queueItem.classList.add('failed'); }
+             else if (statusText === 'Cancelled') { statusBadge.className = 'file-status failed'; statusBadge.textContent = 'Cancelled'; queueItem.classList.add('failed'); } // Visually treat like failed
+             else if (statusText.startsWith('Processing')) { statusBadge.className = 'file-status processing'; statusBadge.textContent = 'Processing'; queueItem.classList.add('processing'); }
+             else if (statusText === 'Queued') { statusBadge.className = 'file-status idle'; statusBadge.textContent = 'Queued'; }
+             else if (statusText) { statusBadge.className = 'file-status idle'; statusBadge.textContent = statusText; } // Generic status like 'Idle'
+             else { statusBadge.remove(); } // Remove if statusText is empty and not completed
+        }
+
+
+        if (isCompleted && completedModelsByFile[fileId]) { updateModelTags(queueItem, fileId); } // Update model tags only on completion
+    }
+
+     function updateModelTags(queueItem, fileId){
+         const modelsContainer = queueItem.querySelector('.file-models');
+         if (modelsContainer && completedModelsByFile[fileId]) {
+             modelsContainer.innerHTML = ''; // Clear existing
+             // Sort models for consistent display (optional)
+             const sortedModels = [...completedModelsByFile[fileId]].sort();
+             sortedModels.forEach(model => {
+                 const modelTag = document.createElement('span'); modelTag.className = 'file-model';
+                 modelTag.textContent = model; modelsContainer.appendChild(modelTag);
+             });
+         }
+     }
+
+    // --- Queue Management ---
+    function removeFileFromQueue(index) {
+        const fileToRemove = fileQueue[index]; if (!fileToRemove) return;
+        const fileId = fileToRemove.id;
+        if (generationInProgress && activeProcessingQueue[currentProcessingIndex]?.id === fileId) {
+            cancelCurrentTranscription(); // Stop backend if this file is running
+            // Don't proceed with removal immediately, let cancel handler manage queue state
+            return;
+        }
+        // If not currently processing, remove directly
+        proceedWithRemoval(index, fileId);
+    }
+
+    function proceedWithRemoval(index, fileId){
+        // Remove from main queue only if index is valid
+        if(index >= 0 && index < fileQueue.length && fileQueue[index].id === fileId){
+             fileQueue.splice(index, 1);
+        } else {
+             // If index is wrong (e.g., due to race condition), find by ID
+             const idxById = fileQueue.findIndex(f => f.id === fileId);
+             if (idxById > -1) fileQueue.splice(idxById, 1);
+        }
+
+        // Remove from active queue if present
+        const activeQueueIndex = activeProcessingQueue.findIndex(f => f.id === fileId);
+        if (activeQueueIndex > -1) {
+            activeProcessingQueue.splice(activeQueueIndex, 1);
+            // Adjust currentProcessingIndex if removing an item before or at the current one
+            if (activeQueueIndex <= currentProcessingIndex) {
+                currentProcessingIndex--;
+            }
+        }
+
+        delete fileResults[fileId]; delete savedTranscriptionsByFile[fileId]; delete completedModelsByFile[fileId]; // Clean data
+
+        // Clean up preview if this was the previewed file
+        if (currentPreviewedFile?.id === fileId) {
+            cleanupPreview();
+        }
+
+        if (currentActiveFile === fileId) { // Handle selection change
+            if (fileQueue.length > 0) {
+                // Select the previous file, or the first if removing the first
+                 const newIndex = Math.max(0, index - 1); // Adjust potential new index
+                 currentActiveFile = fileQueue[newIndex]?.id || fileQueue[0]?.id; // Fallback to first if previous doesn't exist or index was 0
+                 const nextActiveFile = fileQueue.find(f => f.id === currentActiveFile);
+                if(nextActiveFile){
+                     showFilePreview(nextActiveFile); updateModelCompletionStatus(currentActiveFile);
+                     const currentModel = document.querySelector('input[name="model_option"]:checked').value;
+                     if (savedTranscriptionsByFile[currentActiveFile]?.[currentModel]) { // Check for results for *selected* model
+                          fileResults[currentActiveFile] = savedTranscriptionsByFile[currentActiveFile][currentModel]; // Load into view cache
+                          showFileResult(currentActiveFile);
+                     } else { clearTranscriptDisplay(); resetTranscriptionStats(); }
+                } else { // Should not happen if fileQueue.length > 0, but safety check
+                    currentActiveFile = null; clearTranscriptDisplay(); resetTranscriptionStats(); updateModelCompletionStatus(null);
+                    previewPlayer.style.display = 'none'; audioPlayerContainer.style.display = 'none'; currentFileDuration = 0;
+                }
+
+            } else { // Queue empty
+                currentActiveFile = null; clearTranscriptDisplay(); resetTranscriptionStats(); updateModelCompletionStatus(null);
+                previewPlayer.style.display = 'none'; audioPlayerContainer.style.display = 'none'; currentFileDuration = 0;
+            }
+        }
+        updateFileQueue(); clearQueueBtn.disabled = fileQueue.length === 0; updatePriceCalculator();
+    }
+
+    function clearQueue() {
+        if (generationInProgress) cancelCurrentTranscription();
+        cleanupPreview(); // Clean up current preview before clearing queue
+        fileQueue = []; activeProcessingQueue = []; currentProcessingIndex = -1; fileResults = {}; savedTranscriptionsByFile = {}; completedModelsByFile = {};
+        currentActiveFile = null; currentFileDuration = 0;
+        clearTranscriptDisplay(); resetTranscriptionStats(); previewPlayer.style.display = 'none';
+        audioPlayerContainer.style.display = 'none'; updateFileQueue(); clearQueueBtn.disabled = true; updateModelCompletionStatus(null); updatePriceCalculator();
+        showToast('info', 'Queue Cleared', 'All files removed.');
+    }
+    function selectAllFiles() {
+        const allSelected = fileQueue.every(file => file.selected !== false);
+        fileQueue.forEach(file => file.selected = !allSelected);
+        updateFileQueue(); updateTranscribeButtonText();
+    }
+
+    // --- Transcription Process ---
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      if (generationInProgress) { cancelCurrentTranscription(); return; }
+      activeProcessingQueue = fileQueue.filter(file => file.selected !== false && !file.error);
+      if (activeProcessingQueue.length === 0) {
+        showToast('warning', 'No Files Ready', fileQueue.some(f=>f.selected) ? 'Selected files have errors or none are selected.' : 'Please select files to transcribe.'); return;
+      }
+      console.log(`Starting transcription batch for ${activeProcessingQueue.length} selected files.`);
+      currentProcessingIndex = -1; isCancelled = false;
+      processNextFileInQueue(); // Start the first one
+    }
+
+    function processNextFileInQueue() {
+      if (isCancelled) { console.log("Queue stopped by cancellation."); resetTranscriptionUI(); isCancelled = false; return; }
+      let nextIndex = -1;
+      for (let i = currentProcessingIndex + 1; i < activeProcessingQueue.length; i++) {
+          // Find the next file in the active queue that *still exists* in the main fileQueue
+          if(fileQueue.some(fq => fq.id === activeProcessingQueue[i].id)) { nextIndex = i; break; }
+      }
+      if (nextIndex === -1) { console.log('Finished processing batch.'); resetTranscriptionUI(); return; } // Batch done
+
+      // Prep for next file
+      document.getElementById('job_id').value = 'job_' + Math.random().toString(36).substr(2, 9); connectSocket(); // New job ID, ensure connection
+      currentProcessingIndex = nextIndex;
+      const currentFile = activeProcessingQueue[currentProcessingIndex];
+
+      // Select the file in the UI *before* potentially showing preview (which might error)
+      currentActiveFile = currentFile.id;
+      updateFileQueue(); // Update UI highlights/status
+
+      showFilePreview(currentFile); // Show preview and update duration/calculator
+      updateModelCompletionStatus(currentFile.id);
+      console.log(`Processing next: ${currentFile.name} (Index: ${currentProcessingIndex}, Job: ${document.getElementById('job_id').value})`);
+      generationInProgress = true; updateTranscribeButtonText(); // Show Cancel
+      showStatsLoading(true); // Show loading animation for stats
+      clearTranscriptDisplay(); resetTranscriptionStats(); // Clear previous results
+      processFile(currentFile); // Call backend
+    }
+
+    function processFile(file) {
+        const selectedModel = document.querySelector('input[name="model_option"]:checked').value;
+        const currentJobId = document.getElementById('job_id').value;
+        console.log(`processFile: ${file.name}, Model: ${selectedModel}, Job: ${currentJobId}`);
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('job_id', currentJobId);
+        formData.append('model_option', selectedModel); // *** Send selected model for ALL endpoints ***
+
+        let endpoint = '/transcribe_local'; // Default to local
+
+        // Configure for cloud models
+        if (selectedModel === "whisper-1") {
+            endpoint = "/transcribe";
+            const apiKey = document.getElementById('api_key_cloud').value;
+            if (!apiKey) { handleApiError(file.id, 'OpenAI API Key Missing'); return; }
+            formData.append('api_key', apiKey); localStorage.setItem('openaiApiKey', apiKey);
+        } else if (selectedModel === "nova-3") {
+            endpoint = "/transcribe_deepgram";
+            const deepgramApiKey = document.getElementById('deepgram_api_key').value;
+            if (!deepgramApiKey) { handleApiError(file.id, 'Deepgram API Key Missing'); return; }
+            formData.append('deepgram_api_key', deepgramApiKey); localStorage.setItem('deepgramApiKey', deepgramApiKey);
+            formData.append('summarize_enabled', summarizeCheckbox.checked ? 'true' : 'false');
+            formData.append('topics_enabled', topicsCheckbox.checked ? 'true' : 'false');
+            // Supports 10 languages (multi: English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian and Dutch)
+        } else if (selectedModel === "gladia") {
+            endpoint = "/transcribe_gladia";
+            const gladiaApiKey = document.getElementById('gladia_api_key').value;
+            if (!gladiaApiKey) { handleApiError(file.id, 'Gladia API Key Missing'); return; }
+            formData.append('gladia_api_key', gladiaApiKey); localStorage.setItem('gladiaApiKey', gladiaApiKey);
+             // Language forced to 'en' on backend for now
+        }
+
+        // Update UI and Start Transcription
+        loadingOverlay.style.display = 'flex'; startTypewriterAnimation();
+        updateProgress(0, 'Uploading file...');
+        updateFileQueueItemStatusById(file.id, 'Processing'); // Update status immediately
+
+        fetch(endpoint, { method: 'POST', body: formData })
+        .then(response => {
+            if (!response.ok) { return response.json().then(err => { throw new Error(err.error || `Server error: ${response.status}`); }).catch(() => { throw new Error(`HTTP error! status: ${response.status}`); }); }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Initial server response:', data);
+            if (data.status !== 'started') throw new Error(data.error || 'Failed to start job.');
+            updateProgress(10, 'Waiting for processing...'); // Wait for socket events
+        })
+        .catch(error => {
+            console.error('Error sending file/starting job:', error);
+            handleApiError(file.id, error.message || 'Could not start transcription.'); // Use helper for error
+        });
+    }
+
+     function handleApiError(fileId, errorMessage){
+          showToast('error', 'Error', errorMessage);
+          updateFileQueueItemStatusById(fileId, 'Failed');
+          const fileInQueue = fileQueue.find(f => f.id === fileId);
+          if(fileInQueue) fileInQueue.error = true; // Mark as errored
+          generationInProgress = false; // Allow next file attempt
+          stopTypewriterAnimation(); // Stop animation on error
+          loadingOverlay.style.display = 'none';
+          // Ensure progress bar is hidden if error occurs before completion
+          progressContainer.classList.remove('active');
+          processNextFileInQueue(); // Attempt to process the next file
+     }
+
+    function cancelCurrentTranscription() {
+      if (generationInProgress && activeProcessingQueue.length > 0 && currentProcessingIndex >= 0) {
+          const jobIdToCancel = document.getElementById('job_id').value;
+          const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Get ID safely
+          console.log(`User cancelling job: ${jobIdToCancel} for file: ${fileId}`);
+          socket.emit('cancel_transcription', { job_id: jobIdToCancel });
+          isCancelled = true; // Set flag to stop queue processing
+          // Don't set generationInProgress = false here, let the socket event or next step handle it
+          stopTypewriterAnimation();
+          showStatsLoading(false);
+          if (fileId) updateFileQueueItemStatusById(fileId, 'Cancelled'); // Update UI immediately
+          // Full UI reset will happen via socket event or processNextFileInQueue check
+      } else { console.log("Nothing to cancel."); resetTranscriptionUI(); } // Reset if cancel clicked inappropriately
+    }
+
+    // --- Media Preview & Sync ---
+    function cleanupPreview() {
+        // Revoke previous URL and destroy wavesurfer instances
+        if (currentPreviewedFile?.objectURL) {
+            URL.revokeObjectURL(currentPreviewedFile.objectURL);
+             console.log("Revoked Object URL for:", currentPreviewedFile.id);
+        }
+        if (wavesurfer) {
+            wavesurfer.destroy();
+            wavesurfer = null;
+            console.log("Destroyed audio wavesurfer");
+        }
+        if (videoWavesurfer) { // Destroy video's WS instance
+             videoWavesurfer.destroy();
+             videoWavesurfer = null;
+             console.log("Destroyed video wavesurfer");
+        }
+        currentPreviewedFile = null; // Clear the tracking variable
+        // Explicitly stop video player
+        previewPlayer.pause();
+        previewPlayer.removeAttribute('src');
+        previewPlayer.load(); // Attempt to force unload
+        console.log("Cleaned up previous preview.");
+    }
+
+    function showFilePreview(file) {
+        if (!file || currentPreviewedFile?.id === file.id) {
+            console.log("Preview requested for same file or no file, skipping reload.");
+            return; // Avoid unnecessary reloads
+        }
+        console.log("Showing preview for:", file.name, file.id);
+
+        // Cleanup previous preview *before* setting up new one
+        cleanupPreview();
+
+        // Setup new preview tracking
+        currentPreviewedFile = { id: file.id, type: file.type, objectURL: null }; // Reset wavesurfer instance initially
+        currentFileDuration = 0; // Reset duration
+        updatePriceCalculator(); // Reset price
+
+        // Hide players initially
+        previewPlayer.style.display = 'none';
+        audioPlayerContainer.style.display = 'none';
+        showVideoBtn.style.display = 'none';
+        showWaveformBtn.style.display = 'none';
+        showVideoBtn.classList.remove('active'); // Deactivate buttons
+        showWaveformBtn.classList.remove('active');
+        playPauseButton.innerHTML = '<i class="ri-play-fill"></i>'; // Reset button
+
+        try {
+             currentPreviewedFile.objectURL = URL.createObjectURL(file);
+             console.log("Created Object URL:", currentPreviewedFile.objectURL);
+        } catch (e) {
+             console.error("Error creating object URL:", e);
+             handleApiError(file.id, "Cannot create preview URL.");
+             currentPreviewedFile = null; // Clear tracking if URL fails
+             return;
+        }
+
+        if (file.type.startsWith('video/')) {
+            console.log("Setting up video preview...");
+            showVideoBtn.style.display = 'inline-flex';
+            showWaveformBtn.style.display = 'inline-flex';
+            previewPlayer.style.display = 'block'; // Show video first by default
+            showVideoBtn.classList.add('active'); // Activate video button
+
+            previewPlayer.src = currentPreviewedFile.objectURL;
+            previewPlayer.onloadedmetadata = () => {
+                 currentFileDuration = previewPlayer.duration || 0;
+                 console.log("Video duration:", currentFileDuration);
+                 updatePriceCalculator();
+                 attachSyncToPlayer();
+                 setupPlayerEventHandlers();
+                 // Initialize WaveSurfer for video in the background
+                 initializeVideoWaveform(currentPreviewedFile.objectURL);
+            };
+            previewPlayer.onerror = (e) => { console.error("Error loading video:", e); showToast('error', 'Video Error', 'Could not load video preview.'); currentFileDuration = 0; updatePriceCalculator(); };
+
+        } else if (file.type.startsWith('audio/')) {
+            console.log("Setting up audio preview...");
+            audioPlayerContainer.style.display = 'flex'; // Show audio container
+            // Use the main 'wavesurfer' instance for direct audio
+            const colors = getWaveformColors();
+            wavesurfer = WaveSurfer.create({ 
+                container: '#waveform', 
+                waveColor: colors.waveColor, 
+                progressColor: colors.progressColor, 
+                height: 60, 
+                responsive: true, 
+                backend: 'MediaElement', 
+                mediaControls: false, 
+                normalize: true, 
+                partialRender: true 
+            });
+            wavesurfer.isReady = false;
+            wavesurfer.load(currentPreviewedFile.objectURL);
+            wavesurfer.on('ready', () => { wavesurfer.isReady = true; currentFileDuration = wavesurfer.getDuration() || 0; document.querySelector(".time-right").textContent = formatTime(currentFileDuration); document.querySelector(".time-left").textContent = "0:00"; attachSyncToPlayer(); updatePriceCalculator(); });
+            wavesurfer.on('error', (err) => { showToast('error', 'Audio Error', 'Failed to load audio waveform.'); currentFileDuration = 0; updatePriceCalculator(); });
+            setupAudioSeekPreview(); // Add seek preview for audio
+        } else {
+            showToast('warning', 'Unsupported File', 'Cannot preview this file type.');
+            updatePriceCalculator();
+        }
+    }
+
+    function initializeVideoWaveform(url) {
+         // Use the separate instance for video's waveform
+        if (videoWavesurfer) videoWavesurfer.destroy();
+        const colors = getWaveformColors();
+        videoWavesurfer = WaveSurfer.create({ 
+            container: '#waveform', 
+            waveColor: colors.waveColor, 
+            progressColor: colors.progressColor, 
+            height: 60, 
+            responsive: true, 
+            backend: 'MediaElement', 
+            mediaControls: false, 
+            normalize: true, 
+            partialRender: true 
+        });
+        videoWavesurfer.isReady = false;
+        videoWavesurfer.load(url); // Load the same video URL
+        videoWavesurfer.on('ready', () => { videoWavesurfer.isReady = true; setupPlayerEventHandlers(); setupAudioSeekPreview(); }); // Attach handlers when ready
+        videoWavesurfer.on('error', (err) => { showToast('error', 'Waveform Error', 'Could not load waveform from video.'); });
+        if(currentPreviewedFile) currentPreviewedFile.wavesurferInstance = videoWavesurfer; // Store instance
+    }
+
+    function setupAudioSeekPreview() { // Separate function for audio seek preview logic
+        const waveformEl = document.getElementById('waveform');
+        let isWaveformDragging = false;
+        waveformEl.removeEventListener('mousemove', handleWaveformMouseMove); waveformEl.removeEventListener('mouseleave', handleWaveformMouseLeave); waveformEl.removeEventListener('mousedown', handleWaveformMouseDown); document.removeEventListener('mouseup', handleWaveformMouseUp); // Use document for mouseup
+        function handleWaveformMouseMove(e) {
+            const currentWS = (currentPreviewedFile?.type.startsWith('video/')) ? videoWavesurfer : wavesurfer;
+            if (!currentWS?.isReady) return;
+            const rect = waveformEl.getBoundingClientRect(); const x = e.clientX - rect.left; const duration = currentWS.getDuration() || 0;
+            const time = Math.max(0, Math.min(duration, (x / rect.width) * duration));
+            document.querySelector(".time-center").textContent = formatTime(time);
+            if (isWaveformDragging) currentWS.seekTo(time / duration);
+        }
+        function handleWaveformMouseLeave() { if (!isWaveformDragging) document.querySelector(".time-center").textContent = ""; }
+        function handleWaveformMouseDown(e){
+            const currentWS = (currentPreviewedFile?.type.startsWith('video/')) ? videoWavesurfer : wavesurfer;
+            if (!currentWS?.isReady) return;
+            isWaveformDragging = true; handleWaveformMouseMove(e); // Seek immediately
+        }
+        function handleWaveformMouseUp(){ if (isWaveformDragging) { isWaveformDragging = false; handleWaveformMouseLeave(); }}
+        waveformEl.addEventListener('mousemove', handleWaveformMouseMove); waveformEl.addEventListener('mouseleave', handleWaveformMouseLeave); waveformEl.addEventListener('mousedown', handleWaveformMouseDown); document.addEventListener('mouseup', handleWaveformMouseUp);
+    }
+
+    function showVideoPreview() {
+        if (!currentPreviewedFile || !currentPreviewedFile.type.startsWith('video/')) return;
+        audioPlayerContainer.style.display = 'none';
+        previewPlayer.style.display = 'block';
+        showVideoBtn.classList.add('active');
+        showWaveformBtn.classList.remove('active');
+        if (videoWavesurfer?.isPlaying()) videoWavesurfer.pause();
+        // Sync time
+        if (videoWavesurfer?.isReady) {
+            try{
+                previewPlayer.currentTime = videoWavesurfer.getCurrentTime();
+            } catch(e){ /* Silently handle error */ }
+        }
+    }
+
+    function showWaveformPreview() {
+        if (!currentPreviewedFile || !currentPreviewedFile.type.startsWith('video/')) return;
+        if (!videoWavesurfer?.isReady) {
+            showToast('info', 'Waveform Loading', 'Please wait for waveform to generate.');
+            return;
+        }
+        previewPlayer.style.display = 'none';
+        audioPlayerContainer.style.display = 'flex'; // Show the audio container
+        showWaveformBtn.classList.add('active');
+        showVideoBtn.classList.remove('active');
+        if (!previewPlayer.paused) previewPlayer.pause();
+        // Sync time
+        if (!isNaN(previewPlayer.currentTime)) {
+             const duration = videoWavesurfer.getDuration();
+             if(duration > 0) videoWavesurfer.seekTo(previewPlayer.currentTime / duration);
+        }
+    }
+
+
+    function setupPlayerEventHandlers() {
+        // Video Player Events
+        previewPlayer.removeEventListener('play', updatePlayButtonToPause); previewPlayer.removeEventListener('pause', updatePlayButtonToPlay); previewPlayer.removeEventListener('ended', updatePlayButtonToPlay);
+        previewPlayer.addEventListener('play', updatePlayButtonToPause); previewPlayer.addEventListener('pause', updatePlayButtonToPlay); previewPlayer.addEventListener('ended', updatePlayButtonToPlay);
+
+        // Assign correct WaveSurfer instance based on current preview type
+        const currentWS = (currentPreviewedFile?.type.startsWith('video/')) ? videoWavesurfer : wavesurfer;
+
+        if (currentWS) {
+             currentWS.un('play'); currentWS.un('pause'); currentWS.un('finish');
+             currentWS.on('play', updatePlayButtonToPause);
+             currentWS.on('pause', updatePlayButtonToPlay);
+             currentWS.on('finish', updatePlayButtonToPlay); // Reset on finish
+        }
+    }
+
+    function updatePlayButtonToPause() { playPauseButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M13 15L8 18L8 6L13 9L13 15"><animate fill="freeze" attributeName="d" dur="0.1s" values="M13 15L8 18L8 6L13 9L13 15;M9 18L7 18L7 6L9 6L9 18"/></path><path d="M13 9L18 12L18 12L13 15L13 9"><animate fill="freeze" attributeName="d" dur="0.1s" values="M13 9L18 12L18 12L13 15L13 9;M15 6L17 6L17 18L15 18L15 6"/></path></g></svg>'; }
+    function updatePlayButtonToPlay() { playPauseButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M9 6L9 18L7 18L7 6z"><animate fill="freeze" attributeName="d" dur="0.1s" values="M9 18L7 18L7 6L9 6L9 18;M13 15L8 18L8 6L13 9L13 15"/><set attributeName="opacity" begin="0.4s" to="0"/></path><path d="M15 6L17 6L17 18L15 18L15 6"><animate fill="freeze" attributeName="d" dur="0.1s" values="M15 6L17 6L17 18L15 18L15 6;M13 9L18 12L18 12L13 15L13 9"/><set attributeName="opacity" begin="0.4s" to="0"/></path><path d="M8 6L18 12L8 18z" opacity="0"><set attributeName="opacity" begin="0.4s" to="1"/></path></g></svg>'; }
+
+    function togglePlayPause() {
+        try {
+            const isVideoVisible = previewPlayer.style.display !== 'none';
+            const isAudioVisible = audioPlayerContainer.style.display !== 'none';
+            const currentWS = (currentPreviewedFile?.type.startsWith('video/')) ? videoWavesurfer : wavesurfer;
+
+            if (isVideoVisible && currentPreviewedFile?.type.startsWith('video/') && previewPlayer.readyState >= 2) {
+                if (previewPlayer.paused) {
+                    // If waveform was playing, sync time before playing video
+                    if (currentWS?.isPlaying()) {
+                         previewPlayer.currentTime = currentWS.getCurrentTime();
+                         currentWS.pause(); // Pause waveform
+                    }
+                    previewPlayer.play().catch(err => showToast('error', 'Playback Error', 'Video play error: ' + err.message));
+                } else {
+                    previewPlayer.pause();
+                }
+            } else if (isAudioVisible && currentWS?.isReady) {
+                 if (currentWS.isPlaying()) {
+                      currentWS.pause();
+                 } else {
+                      // If video was playing, sync time before playing waveform
+                     if (!previewPlayer.paused) {
+                           const duration = currentWS.getDuration();
+                           if(duration > 0) currentWS.seekTo(previewPlayer.currentTime / duration);
+                           previewPlayer.pause(); // Pause video
+                     }
+                     currentWS.play();
+                 }
+            } else {
+                showToast('info', 'Player Not Ready', 'Media loading or no file selected.');
+            }
+        } catch (err) {
+            console.error('Error in togglePlayPause:', err);
+            showToast('error', 'Playback Error', 'Error: ' + err.message);
+        }
+    }
+
+    function syncAudio(time) {
+        if (isNaN(time)) return;
+        const timeLeftEl = audioPlayerContainer.querySelector(".time-left"); // Target specific time display
+        if(timeLeftEl) timeLeftEl.textContent = formatTime(time);
+        updateTranscriptHighlight(time);
+    }
+
+    function updateTranscriptHighlight(currentTime) {
+         if (isNaN(currentTime)) return;
+         const activeTab = document.querySelector('.button-tab[data-tab].active')?.dataset.tab;
+         if (!activeTab) return;
+         const contentElement = document.getElementById(`${activeTab}Transcript`);
+         if (!contentElement) return;
+
+         const segments = contentElement.querySelectorAll(".transcript-segment");
+         let highlightedSegment = null;
+
+         segments.forEach(segment => {
+             segment.classList.remove("highlighted", "next-segment");
+             const start = parseFloat(segment.getAttribute("data-start"));
+             const end = parseFloat(segment.getAttribute("data-end"));
+             if (!isNaN(start) && !isNaN(end) && currentTime >= start && currentTime <= end) {
+                 segment.classList.add("highlighted");
+                 highlightedSegment = segment;
+             }
+         });
+
+         if (highlightedSegment) {
+             const containerRect = contentElement.getBoundingClientRect();
+             const segmentRect = highlightedSegment.getBoundingClientRect();
+             if (segmentRect.top < containerRect.top || segmentRect.bottom > containerRect.bottom) {
+                 highlightedSegment.scrollIntoView({ behavior: 'smooth', block: 'center' });
+             }
+         } else {
+             let closestSegment = null; let minStartTime = Infinity;
+             segments.forEach(segment => {
+                 const start = parseFloat(segment.getAttribute("data-start"));
+                 if (!isNaN(start) && start > currentTime && start < minStartTime) { minStartTime = start; closestSegment = segment; }
+             });
+             if (closestSegment) closestSegment.classList.add("next-segment");
+         }
+     }
+
+    function handleVideoTimeUpdate() {
+        syncAudio(this.currentTime);
+    }
+
+    function attachSyncToPlayer() {
+        previewPlayer.removeEventListener("timeupdate", handleVideoTimeUpdate);
+        previewPlayer.addEventListener("timeupdate", handleVideoTimeUpdate);
+
+        // Assign correct WaveSurfer instance based on current preview type
+        const currentWS = (currentPreviewedFile?.type.startsWith('video/')) ? videoWavesurfer : wavesurfer;
+
+        if (currentWS) {
+            currentWS.un("audioprocess");
+            currentWS.un("seek");
+            if (currentWS.isReady) {
+                currentWS.on("audioprocess", syncAudio);
+                currentWS.on("seek", (p) => syncAudio(p * currentWS.getDuration()));
+            } else {
+                // This might be redundant if ready handler already does this, but safe
+                currentWS.once("ready", () => {
+                    currentWS.isReady = true;
+                    currentWS.on("audioprocess", syncAudio);
+                    currentWS.on("seek", (p) => syncAudio(p * currentWS.getDuration()));
+                });
+            }
+        }
+         setupPlayerEventHandlers(); // Re-attach play/pause handlers
+    }
+
+    function setupTranscriptClickDelegation() {
+        document.querySelectorAll('.transcript-content .transcript-body').forEach(container => {
+            container.removeEventListener('click', handleTranscriptClick);
+            container.addEventListener('click', handleTranscriptClick);
+        });
+    }
+
+    function handleTranscriptClick(event) {
+        const seekButton = event.target.closest('.seek-btn');
+        if (seekButton) {
+            const segment = seekButton.closest('.transcript-segment');
+            if (segment?.dataset.start) {
+                const startTime = parseFloat(segment.dataset.start);
+                if (!isNaN(startTime)) {
+                    const isVideoVisible = previewPlayer.style.display !== 'none';
+                    const currentWS = (currentPreviewedFile?.type.startsWith('video/')) ? videoWavesurfer : wavesurfer;
+
+                    if (isVideoVisible && previewPlayer.duration > 0) {
+                        const wasPaused = previewPlayer.paused;
+                        previewPlayer.currentTime = startTime;
+                        if (wasPaused) previewPlayer.play().catch(err => console.error('Error playing video after seek:', err));
+                    } else if (currentWS?.isReady) {
+                        const duration = currentWS.getDuration();
+                        const wasPaused = !currentWS.isPlaying();
+                        if (duration > 0) {
+                            currentWS.seekTo(startTime / duration);
+                            if (wasPaused) currentWS.play();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Transcript Display & Actions ---
+     function showFileResult(fileId) {
+        if (!fileId || !fileResults[fileId]) return;
+        clearTranscriptDisplay(); // Clear first
+        const results = fileResults[fileId];
+        // Set content for each tab
+        document.querySelector('#defaultTranscript .transcript-body').innerHTML = results.default_transcript;
+        document.querySelector('#numberedTranscript .transcript-body').innerHTML = results.numbered_transcript;
+        document.querySelector('#srtTranscript .transcript-body').innerHTML = results.srt_text;
+        document.querySelector('#vttTranscript .transcript-body').innerHTML = results.vtt_text;
+        document.querySelector('#tsvTranscript .transcript-body').innerHTML = results.tsv_text;
+        
+        // Deepgram features: Set Summary and Topics if available
+        const isDeepgram = results.model === 'nova-3';
+        if (isDeepgram && results.summary_text) {
+            summaryTranscriptDiv.querySelector('.transcript-body').innerText = results.summary_text;
+        }
+        if (isDeepgram && results.topics_data) {
+            topicsTranscriptDiv.querySelector('.transcript-body').innerHTML = formatTopics(results.topics_data);
+        }
+        
+        // Show/hide special tabs
+        summaryTabBtn.style.display = isDeepgram && results.summary_text ? 'inline-flex' : 'none';
+        topicsTabBtn.style.display = isDeepgram && results.topics_data ? 'inline-flex' : 'none';
+
+        const activeTabBtn = document.querySelector('.button-tab[data-tab].active');
+        if (activeTabBtn?.style.display === 'none') switchTab('default'); // Switch if current tab became hidden
+
+        document.querySelector('.transcript-title').innerHTML = `<i class="ri-file-text-line"></i><h2>${results.fileName} <span style="opacity:0.6; font-weight:normal; font-size:0.9rem;">(${results.model} - ${results.language})</span></h2>`; // Show detected lang
+        updateActionButtons(); // Enable copy/download
+        loadingOverlay.style.display = 'none'; stopTypewriterAnimation();
+        updateTranscriptionStats(results.default_transcript, results.elapsed_time); // Pass elapsed time
+        setTimeout(() => { attachSyncToPlayer(); setupTranscriptClickDelegation(); }, 100);
+    }
+    function clearTranscriptDisplay() {
+        document.querySelectorAll('.transcript-content .transcript-body').forEach(el => el.innerHTML = '');
+        summaryTabBtn.style.display = 'none';
+        topicsTabBtn.style.display = 'none';
+        document.querySelector('.transcript-title').innerHTML = `<i class="ri-file-text-line"></i><h2>Transcript</h2>`;
+        updateActionButtons();
+    }
+    function switchTab(tabType) {
+        document.querySelectorAll('.transcript-content').forEach(c => c.style.display = 'none');
+        document.querySelectorAll('.button-tab[data-tab]').forEach(b => b.classList.remove('active'));
+        const btn = document.querySelector(`.button-tab[data-tab="${tabType}"]`);
+        const content = document.getElementById(`${tabType}Transcript`);
+        if(btn) btn.classList.add('active'); // Add active class
+        if(content) content.style.display = 'block';
+
+        // Populate Summary/Topics only if the tab is selected and data exists
+        if (currentActiveFile && fileResults[currentActiveFile]) {
+           const results = fileResults[currentActiveFile]; // Get current view result
+           if (tabType === 'summary') {
+               summaryTranscriptDiv.querySelector('.transcript-body').innerText = results.summary_text || 'Summary not available.';
+           } else if (tabType === 'topics') {
+               topicsTranscriptDiv.querySelector('.transcript-body').innerHTML = results.topics_data ? formatTopics(results.topics_data) : 'Topics not available.';
+           }
+        } else if (tabType === 'summary' || tabType === 'topics') {
+           // Handle case where no file/results exist when switching to these tabs
+           document.getElementById(`${tabType}Transcript`).querySelector('.transcript-body').innerHTML = '<p><i>No data available.</i></p>';
+        }
+        updateActionButtons(); // Update copy/download button state
+    }
+    function updateActionButtons(){
+        const hasContent = !!(currentActiveFile && fileResults[currentActiveFile]);
+        copyButton.disabled = !hasContent;
+        downloadButton.disabled = !hasContent;
+    }
+    function increaseFontSize() {
+        currentFontSize = Math.min(32, currentFontSize + 2);
+        document.querySelectorAll('.transcript-content .transcript-body').forEach(el => {
+            if(el) el.style.fontSize = currentFontSize + "px";
+        });
+    }
+    function decreaseFontSize() {
+        currentFontSize = Math.max(10, currentFontSize - 2);
+        document.querySelectorAll('.transcript-content .transcript-body').forEach(el => {
+             if(el) el.style.fontSize = currentFontSize + "px";
+        });
+    }
+    function copyTranscript() {
+        if (!currentActiveFile || !fileResults[currentActiveFile]) return;
+        const activeTab = document.querySelector('.button-tab[data-tab].active')?.dataset.tab;
+        if (!activeTab) return;
+        let textToCopy = '';
+        const results = fileResults[currentActiveFile];
+        const activeContentDiv = document.getElementById(`${activeTab}Transcript`);
+
+        if (activeTab === 'srt' && results.plain_srt) {
+            textToCopy = results.plain_srt; // Use plain SRT if available
+        } else if (activeTab === 'tsv' && results.tsv_plain) {
+            textToCopy = results.tsv_plain; // Use plain TSV if available
+        } else if (activeContentDiv) {
+            textToCopy = activeContentDiv.querySelector('.transcript-body')?.innerText || ''; // Fallback to innerText
+        }
+
+        if (textToCopy) {
+            navigator.clipboard.writeText(textToCopy)
+                .then(() => {
+                    showToast('success', 'Copied', 'Content copied.');
+                    copyButton.innerHTML = '<i class="ri-check-line"></i><span>Copied!</span>';
+                    setTimeout(() => { copyButton.innerHTML = '<i class="ri-clipboard-line"></i><span>Copy</span>'; }, 2000);
+                })
+                .catch(err => { console.error('Copy failed:', err); showToast('error', 'Copy Failed', 'Could not copy.'); });
+        } else {
+            showToast('warning', 'Nothing to Copy', 'No content.');
+        }
+    }
+    function downloadTranscript() {
+        if (!currentActiveFile || !fileResults[currentActiveFile]) { showToast('error', 'No Transcript', 'Nothing to download.'); return; }
+        const activeTab = document.querySelector('.button-tab[data-tab].active')?.dataset.tab; if (!activeTab) return;
+        const results = fileResults[currentActiveFile];
+        const baseFileName = results.fileName.replace(/\.[^/.]+$/, '');
+        const modelName = results.model || 'unknown';
+        let contentToDownload = '';
+        let fileExtension = 'txt';
+
+        switch (activeTab) {
+            case 'srt':
+                contentToDownload = results.plain_srt || htmlToPlainTextSrt(document.querySelector("#srtTranscript .transcript-body")?.innerHTML || '');
+                fileExtension = 'srt';
+                break;
+            case 'vtt':
+                contentToDownload = htmlToPlainTextVtt(document.querySelector("#vttTranscript .transcript-body")?.innerHTML || '');
+                fileExtension = 'vtt';
+                break;
+            case 'tsv':
+                contentToDownload = results.tsv_plain || htmlToPlainTextTsv(document.querySelector("#tsvTranscript .transcript-body")?.innerHTML || '');
+                fileExtension = 'tsv';
+                break;
+            case 'summary':
+               contentToDownload = document.querySelector("#summaryTranscript .transcript-body")?.innerText || '';
+               fileExtension = 'summary.txt';
+               break;
+           case 'topics':
+               contentToDownload = document.querySelector("#topicsTranscript .transcript-body")?.innerText || '';
+                fileExtension = 'topics.txt';
+               break;
+          case 'default':
+          case 'numbered':
+          default: // Fallback for default/numbered or unknown
+              contentToDownload = document.querySelector(`#${activeTab}Transcript .transcript-body`)?.innerText || '';
+              fileExtension = 'txt';
+              break;
+        }
+
+        if (!contentToDownload) {
+           showToast('warning', 'Nothing to Download', 'No content found for the current tab.');
+           return;
+        }
+
+        const blob = new Blob([contentToDownload], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // Include model and tab type in filename
+        a.download = `${baseFileName}_${modelName}_${activeTab}.${fileExtension}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('success', 'Downloaded', `Downloaded ${a.download}`);
+    }
+    // Helper needed for SRT/TSV download fallback
+    function htmlToPlainTextSrt(srtHtml) { if (!srtHtml) return ''; const tempDiv = document.createElement('div'); tempDiv.innerHTML = srtHtml; let output = ""; tempDiv.querySelectorAll('.transcript-segment').forEach(seg => { const index = seg.querySelector('.srt-index')?.innerText.trim(); const timing = seg.querySelector('.srt-timing')?.innerText.trim(); const text = seg.querySelector('.srt-text')?.innerText.trim(); if (index && timing && text) output += `${index}\n${timing}\n${text}\n\n`; }); return output.trim(); }
+    function htmlToPlainTextTsv(tsvHtml) { if (!tsvHtml) return ''; const tempDiv = document.createElement('div'); tempDiv.innerHTML = tsvHtml; let output = "Segment\tStart\tEnd\tText\n"; tempDiv.querySelectorAll('tbody tr.transcript-segment').forEach(row => { const cells = row.querySelectorAll('td'); if (cells.length === 4) { output += `${cells[0].innerText.trim()}\t${cells[1].innerText.trim()}\t${cells[2].innerText.trim()}\t${cells[3].innerText.trim()}\n`; } }); return output.trim(); }
+    function htmlToPlainTextVtt(vttHtml) { if (!vttHtml) return ''; const tempDiv = document.createElement('div'); tempDiv.innerHTML = vttHtml; let output = ''; const header = tempDiv.querySelector('.vtt-header'); output += (header ? header.innerText.trim() : 'WEBVTT') + '\n\n'; tempDiv.querySelectorAll('.vtt-entry').forEach(entry => { const timing = entry.querySelector('.vtt-timing')?.innerText.trim(); const text = entry.querySelector('.vtt-text')?.innerText.trim(); if (timing && text) output += `${timing}\n${text}\n\n`; }); return output.trim(); }
+
+
+    // --- Statistics ---
+     function countParagraphs(htmlContent) { if (!htmlContent) return 0; const segmentMatch = htmlContent.match(/class="transcript-segment"/g); return segmentMatch ? segmentMatch.length : (htmlContent.trim() ? 1 : 0); }
+     function htmlToPlainTextForStats(htmlContent) { if (!htmlContent) return ""; const tempDiv = document.createElement('div'); tempDiv.innerHTML = htmlContent; let text = ""; tempDiv.querySelectorAll('.segment-text, .srt-text, .vtt-text, td:last-child').forEach(el => { text += el.textContent + "\n"; }); if (!text.trim()) text = tempDiv.textContent || tempDiv.innerText || ""; return text.replace(/\s+/g, ' ').trim(); }
+     function updateTranscriptionStats(transcriptHtml, elapsedTime = null) {
+         if (!transcriptHtml) { resetTranscriptionStats(); return; }
+         showStatsLoading(true);
+         setTimeout(() => {
+             const plainText = htmlToPlainTextForStats(transcriptHtml);
+             const wordCount = countWords(plainText);
+             const charCount = plainText.length;
+             const paraCount = countParagraphs(transcriptHtml);
+
+             const statItems = statsContainer.querySelectorAll('.stat-item');
+             statItems[0].querySelector('.stat-value').textContent = wordCount.toLocaleString();
+             statItems[1].querySelector('.stat-value').textContent = charCount.toLocaleString();
+             statItems[2].querySelector('.stat-value').textContent = paraCount.toLocaleString();
+
+             // Update Elapsed Time
+             if(elapsedTime !== null && elapsedTime >= 0){
+                  elapsedTimeValueEl.textContent = formatElapsedTime(elapsedTime); // Use helper function
+             } else {
+                  elapsedTimeValueEl.textContent = 'N/A';
+             }
+
+             showStatsLoading(false);
+             statsContainer.style.display = 'flex';
+         }, 50);
+     }
+     function resetTranscriptionStats() {
+         const statItems = statsContainer.querySelectorAll('.stat-item');
+         statItems.forEach((item, i) => {
+             const valueEl = item.querySelector('.stat-value');
+             if (valueEl) {
+                 valueEl.textContent = (valueEl.id === 'elapsedTimeValue') ? '0s' : '0'; // Reset elapsed time to 0s
+             }
+         });
+     }
+     function formatElapsedTime(seconds) {
+         if (seconds === null || seconds < 0) return 'N/A';
+         const minutes = Math.floor(seconds / 60);
+         const remainingSeconds = seconds % 60;
+         if (minutes > 0) {
+             return `${minutes}m ${remainingSeconds}s`;
+         } else {
+             return `${remainingSeconds}s`;
+         }
+     }
+     function showStatsLoading(show) { statsContainer.style.display = show ? 'none' : 'flex'; statsLoading.style.display = show ? 'flex' : 'none'; }
+     function countWords(text) { return text ? text.split(/\s+/).filter(Boolean).length : 0; }
+
+    // --- Matrix raindrop animation when processing transcript ---
+    function startTypewriterAnimation() { 
+        stopTypewriterAnimation(); 
+        const container = document.getElementById('typewriterContainer'); 
+        if (!container) return; 
+        container.innerHTML = ''; 
+        const letterCount = 150; 
+        
+        function createRandomLetter() { 
+            if (!container || container.childNodes.length >= letterCount) return; 
+            
+            const letter = document.createElement('div'); 
+            letter.className = 'typewriter-letter'; 
+            
+            // Random position throughout the container
+            const x = Math.floor(Math.random() * container.offsetWidth);
+            const y = Math.floor(Math.random() * container.offsetHeight);
+            letter.style.left = `${x}px`; 
+            letter.style.top = `${y}px`; 
+            
+            // Weighted language selection
+            let selectedLanguage;
+            const languageKeys = Object.keys(languages);
+            const useLatin = Math.random() < 0.7; // Higher chance for Latin letters to show
+            
+            if (useLatin) {
+                selectedLanguage = languages.latin;
+            } else {
+                // For non-Latin, pick randomly from other languages
+                const nonLatinKeys = languageKeys.filter(key => key !== 'latin');
+                selectedLanguage = languages[nonLatinKeys[Math.floor(Math.random() * nonLatinKeys.length)]];
+            }
+            
+            letter.textContent = selectedLanguage[Math.floor(Math.random() * selectedLanguage.length)]; 
+            
+            // Random size between 16px and 24px
+            const size = Math.floor(16 + Math.random() * 8);
+            letter.style.fontSize = `${size}px`; 
+            
+            container.appendChild(letter); 
+            
+            // Remove after animation completes
+            setTimeout(() => { 
+                if (letter.parentNode === container) container.removeChild(letter); 
+            }, 4000); 
+        } 
+        
+        // Create characters at a slower pace
+        typewriterInterval = setInterval(() => { 
+            for (let i = 0; i < 3; i++) createRandomLetter(); 
+        }, 400); 
+    }
+    function stopTypewriterAnimation() { if (typewriterInterval) { clearInterval(typewriterInterval); typewriterInterval = null; const container = document.getElementById('typewriterContainer'); if (container) container.innerHTML = ''; } }
+    function initializeTheme() { const savedTheme = localStorage.getItem('theme') || 'light'; applyTheme(savedTheme); }
+    function switchTheme(themeName) { applyTheme(themeName); localStorage.setItem('theme', themeName); showToast('info', 'Theme Changed', `Switched to ${themeName.charAt(0).toUpperCase() + themeName.slice(1)} theme`); }
+    function applyTheme(themeName) {
+        document.body.classList.remove('Toffee-theme', 'minty-theme', 'nova-theme');
+        if (themeName !== 'light') document.body.classList.add(`${themeName}-theme`);
+
+        // Update active state for all theme buttons
+        document.querySelectorAll('.button-tab[data-theme]').forEach(btn => {
+            if (btn.dataset.theme === themeName) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Update wavesurfer colors
+        const waveColor = getComputedStyle(document.body).getPropertyValue('--text-tertiary').trim();
+        const progressColor = getComputedStyle(document.body).getPropertyValue('--primary-color').trim();
+        if(wavesurfer){
+            try { wavesurfer.setWaveColor(waveColor); wavesurfer.setProgressColor(progressColor); }
+            catch(e){ /* Silently handle error */ }
+        }
+        if(videoWavesurfer){
+             try { videoWavesurfer.setWaveColor(waveColor); videoWavesurfer.setProgressColor(progressColor); }
+             catch(e){ /* Silently handle error */ }
+         }
+    }
+    function toggleApiKeyVisibility() { const input = document.getElementById('api_key_cloud'), btn = document.getElementById('showApiKey'); if (input.type === 'password') { input.type = 'text'; btn.innerHTML = '<i class="ri-eye-off-line"></i>'; } else { input.type = 'password'; btn.innerHTML = '<i class="ri-eye-line"></i>'; } }
+    function togglePasswordVisibility(inputId, button) { const input = document.getElementById(inputId); if (input.type === "password") { input.type = "text"; button.innerHTML = '<i class="ri-eye-off-line"></i>'; } else { input.type = "password"; button.innerHTML = '<i class="ri-eye-line"></i>'; } }
+    function showToast(type, title, message) { const tc = document.querySelector('.toast-container'), t = document.createElement('div'); t.className = `toast toast-${type}`; t.innerHTML = `<div class="toast-icon"><i class="ri-${type === 'success' ? 'check-line' : type === 'error' ? 'error-warning-line' : type === 'warning' ? 'alert-line' : 'information-line'}"></i></div><div class="toast-content"><div class="toast-title">${title}</div><div class="toast-message">${message}</div></div><button class="toast-close"><i class="ri-close-line"></i></button>`; tc.appendChild(t); t.querySelector('.toast-close').addEventListener('click', () => t.remove()); setTimeout(() => t.remove(), 3000); }
+    function requestNotificationPermission() { if ('Notification' in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission().then(p => { if(p === "granted") showToast('success', 'Notifications Enabled', 'You will receive notifications.'); else { showToast('info', 'Notifications Disabled'); document.getElementById('notifyToggle').checked = false; }}); } else if (Notification.permission === "denied"){ showToast('warning', 'Notifications Blocked', 'Please enable in browser settings.'); document.getElementById('notifyToggle').checked = false; } }
+    function showBrowserNotification(title, message) { if ('Notification' in window && Notification.permission === "granted") new Notification(title, { body: message }); }
+    function resetTranscriptionUI() { 
+        generationInProgress = false; 
+        loadingOverlay.style.display = 'none'; 
+        progressContainer.classList.remove('active'); 
+        stopTypewriterAnimation(); 
+        updateTranscribeButtonText(); 
+        activeProcessingQueue = []; 
+        currentProcessingIndex = -1; 
+        isCancelled = false; 
+        showStatsLoading(false); // Ensure stats loading is reset
+    } // Also reset queue state
+    function updateProgress(percent, message) { progressBar.style.width = `${percent}%`; progressMessage.textContent = message || 'Processing...'; progressPercent.textContent = `${Math.round(percent)}%`; progressContainer.classList.toggle('active', percent > 0 && percent < 100); }
+
+    // --- Model & Feature Handling ---
+    function handleModelChange() {
+        const selectedModel = document.querySelector('input[name="model_option"]:checked').value;
+        apiKeySection.style.display = (selectedModel === 'whisper-1') ? 'block' : 'none';
+        deepgramApiKeySection.style.display = (selectedModel === 'nova-3') ? 'block' : 'none';
+        gladiaApiKeySection.style.display = (selectedModel === 'gladia') ? 'block' : 'none';
+        deepgramOptionsDiv.style.display = (selectedModel === 'nova-3') ? 'block' : 'none';
+
+        // Load saved API keys
+        if (selectedModel === 'whisper-1') apiKeySection.querySelector('input').value = localStorage.getItem('openaiApiKey') || '';
+        else if (selectedModel === 'nova-3') deepgramApiKeySection.querySelector('input').value = localStorage.getItem('deepgramApiKey') || '';
+        else if (selectedModel === 'gladia') gladiaApiKeySection.querySelector('input').value = localStorage.getItem('gladiaApiKey') || '';
+
+        // Update Model Info highlighting in sidebar - reset all headings first
+        document.querySelectorAll('#modelInfoContent .sidebar-section').forEach(section => {
+            section.classList.remove('active-model');
+        });
+            
+        // Find and highlight the selected model using data-model attribute
+        const selectedHeader = document.querySelector(`#modelInfoContent .sidebar-section h3[data-model="${selectedModel}"]`);
+        if (selectedHeader) {
+            // Get the parent section and add the active class to it
+            const parentSection = selectedHeader.closest('.sidebar-section');
+            if (parentSection) {
+                parentSection.classList.add('active-model');
+            }
+        }
+
+        updatePriceCalculator(); // Update cost estimate
+        handleDeepgramFeatureChange(); // Update visibility of DG tabs based on current checkbox state
+
+        if (currentActiveFile) {
+            updateModelCompletionStatus(currentActiveFile); // Update completion badges
+            // Check if saved results exist for the *newly selected model* and display them
+            if (savedTranscriptionsByFile[currentActiveFile]?.[selectedModel]) {
+                 console.log(`Switching view to saved results for ${selectedModel} on file ${currentActiveFile}.`);
+                 // Copy the saved result for this model into the active display cache
+                 fileResults[currentActiveFile] = savedTranscriptionsByFile[currentActiveFile][selectedModel];
+                 showFileResult(currentActiveFile);
+                 // Update stats for the loaded result
+                 updateTranscriptionStats(fileResults[currentActiveFile].default_transcript, fileResults[currentActiveFile].elapsed_time);
+            } else {
+                 // Clear display if no results saved for this model/file combo
+                 console.log(`No saved results for ${selectedModel}, clearing transcript display.`);
+                 clearTranscriptDisplay(); resetTranscriptionStats();
+            }
+        } else {
+             clearTranscriptDisplay(); resetTranscriptionStats(); // Clear if no file active
+        }
+        updateTranscribeButtonText(); // Ensure button text is correct
+    }
+
+    function handleDeepgramFeatureChange(){
+         updatePriceCalculator();
+         // Check if Deepgram model is currently selected
+         const isDeepgramSelected = document.querySelector('input[name="model_option"]:checked').value === 'nova-3';
+         
+         // Show/hide feature hint messages based on model selection and feature toggles
+         document.getElementById('summarizeHint').style.display = isDeepgramSelected && summarizeCheckbox.checked ? 'block' : 'none';
+         document.getElementById('topicsHint').style.display = isDeepgramSelected && topicsCheckbox.checked ? 'block' : 'none';
+
+         // In transcript panel:
+         // Make Deepgram -specific tabs (Summary, Topics) visible when both conditions are true:
+         // 1. Deepgram model is selected
+         // 2. The corresponding feature checkbox is checked
+         summaryTabBtn.style.display = isDeepgramSelected && summarizeCheckbox.checked ? 'inline-flex' : 'none';
+         topicsTabBtn.style.display = isDeepgramSelected && topicsCheckbox.checked ? 'inline-flex' : 'none';
+
+        // Special case: If we already have processed results for this file with Deepgram,
+        // make sure to show the tabs that have data, regardless of checkbox state
+        if (currentActiveFile && fileResults[currentActiveFile]?.model === 'nova-3') {
+             if(fileResults[currentActiveFile].summary_text) summaryTabBtn.style.display = 'inline-flex';
+             if(fileResults[currentActiveFile].topics_data) topicsTabBtn.style.display = 'inline-flex';
+        }
+
+         // If the currently active tab was hidden by the changes above,
+         // automatically switch to the default transcript tab
+         const activeTabBtn = document.querySelector('.button-tab[data-tab].active');
+         if (activeTabBtn?.style.display === 'none') switchTab('default');
+     }
+
+    function updateModelCompletionStatus(fileId = null) {
+        const targetFileId = fileId || currentActiveFile;
+        document.querySelectorAll('.model-done-badge').forEach(b => b.remove()); // Clear all first
+        if (!targetFileId || !completedModelsByFile[targetFileId]) return; // Exit if no data
+        const completed = completedModelsByFile[targetFileId];
+        document.querySelectorAll('.model-option input[type="radio"]').forEach(radio => {
+            if (completed.includes(radio.value)) {
+                const label = radio.nextElementSibling;
+                if (label && !label.querySelector('.model-done-badge')) { // Ensure badge doesn't exist
+                    const badge = document.createElement('span'); badge.className = 'model-done-badge';
+                    badge.innerHTML = '<i class="ri-check-line"></i>'; label.appendChild(badge);
+                }
+            }
+        });
+    }
+
+    function updateTranscribeButtonText() {
+        const selectedFiles = fileQueue.filter(file => file.selected !== false && !file.error); // Count only non-errored selected
+        const selectedCount = selectedFiles.length;
+        const button = document.getElementById("transcribeButton");
+
+        if (generationInProgress) {
+            button.innerHTML = `<i class="ri-stop-circle-line"></i><span>Cancel</span>`;
+            button.disabled = false; // Always enable cancel
+        } else {
+            let text = 'Transcribe';
+            if (selectedCount > 1) text = `Transcribe Selected (${selectedCount})`;
+            else if (selectedCount === 1) text = 'Transcribe';
+            button.innerHTML = `<i class="ri-draft-line"></i><span>${text}</span>`;
+            button.disabled = selectedCount === 0; // Disable if nothing valid selected
+        }
+    }
+
+    // --- Price Calculation ---
+    function updatePriceCalculator() {
+        const selectedModel = document.querySelector('input[name="model_option"]:checked').value;
+        const isSummarizeEnabled = selectedModel === 'nova-3' && summarizeCheckbox.checked;
+        const isTopicsEnabled = selectedModel === 'nova-3' && topicsCheckbox.checked;
+
+        let baseCostPerMinute = 0; let apiName = ''; let showCalculator = false;
+        let totalEstimatedCost = 0; let summarizationCost = 0; let topicDetectionCost = 0; let baseApiCost = 0;
+        
+        // Set the pricing documentation link based on the selected model
+        const pricingDocLink = document.getElementById('pricingDocLink');
+        if (selectedModel === 'whisper-1') { 
+            baseCostPerMinute = 0.006; 
+            apiName = 'Whisper-1'; 
+            showCalculator = true;
+            pricingDocLink.href = 'https://platform.openai.com/docs/pricing#transcription-and-speech-generation';
+        }
+        else if (selectedModel === 'nova-3') { 
+            baseCostPerMinute = 0.0052; 
+            apiName = 'Nova-3'; 
+            showCalculator = true;
+            pricingDocLink.href = 'https://deepgram.com/pricing';
+        }
+        else if (selectedModel === 'gladia') { 
+            showCalculator = true;
+            pricingDocLink.href = 'https://docs.gladia.io/chapters/limits-and-specifications/concurrency';
+        }
+
+        priceCalculatorDiv.style.display = showCalculator ? 'block' : 'none';
+        summarizationCostRow.style.display = 'none'; topicDetectionCostRow.style.display = 'none'; // Hide feature costs by default
+
+        if (showCalculator && currentFileDuration > 0) {
+            const durationInMinutes = currentFileDuration / 60;
+            
+            if (selectedModel === 'gladia') {
+                // For Gladia, show hourly credits instead of cost
+                fileDurationValue.textContent = formatDuration(currentFileDuration);
+                apiPricingLabel.textContent = 'Gladia Free Plan:';
+                apiPricingValue.textContent = '10 hours';
+                // Calculate file duration in hours (with 2 decimal places)
+                const durationInHours = (durationInMinutes / 60).toFixed(2);
+                estimatedCostValue.textContent = `${durationInHours} hours`;
+            } else {
+                // Regular cost calculation for other models
+                baseApiCost = durationInMinutes * baseCostPerMinute; 
+                totalEstimatedCost += baseApiCost;
+                apiPricingLabel.textContent = `${apiName}:`; 
+                apiPricingValue.textContent = `$${baseCostPerMinute.toFixed(4)} / min`;
+
+                if (selectedModel === 'nova-3') { // Deepgram feature costs
+                    if (isSummarizeEnabled || isTopicsEnabled) {
+                        // Calculate estimated number of words in audio
+                        const estimatedWords = durationInMinutes * AVG_WORDS_PER_MINUTE;
+                        // Calculate estimated input tokens
+                        const estimatedInputTokens = estimatedWords * AVG_TOKENS_PER_WORD;
+                        
+                        if (isSummarizeEnabled) { 
+                            // Calculate estimated output tokens for summarization (20% of input)
+                            const estimatedSummaryOutputTokens = estimatedInputTokens * SUMMARY_OUTPUT_PERCENTAGE;
+                            // Calculate total summarization cost
+                            summarizationCost = 
+                                (estimatedInputTokens * DEEPGRAM_INPUT_TOKEN_COST) + 
+                                (estimatedSummaryOutputTokens * DEEPGRAM_OUTPUT_TOKEN_COST);
+                            
+                            summarizationCostValue.textContent = `$${summarizationCost.toFixed(4)}`; 
+                            summarizationCostRow.style.display = 'flex'; 
+                            totalEstimatedCost += summarizationCost; 
+                        }
+                        
+                        if (isTopicsEnabled) { 
+                            // Topic detection - input tokens only (minimal output)
+                            topicDetectionCost = estimatedInputTokens * DEEPGRAM_INPUT_TOKEN_COST;
+                            
+                            topicDetectionCostValue.textContent = `$${topicDetectionCost.toFixed(4)}`; 
+                            topicDetectionCostRow.style.display = 'flex'; 
+                            totalEstimatedCost += topicDetectionCost; 
+                        }
+                    }
+                }
+                fileDurationValue.textContent = formatDuration(currentFileDuration); 
+                estimatedCostValue.textContent = `$${totalEstimatedCost.toFixed(4)}`;
+            }
+        } else { // Reset if calculator hidden or no duration
+            fileDurationValue.textContent = showCalculator ? 'N/A' : 'N/A';
+            if (selectedModel === 'gladia') {
+                apiPricingLabel.textContent = `Gladia Free Plan:`;
+                apiPricingValue.textContent = '10 hours';
+                estimatedCostValue.textContent = '0.00 hours';
+            } else {
+                apiPricingLabel.textContent = `${apiName}:`;
+                apiPricingValue.textContent = 'N/A';
+                estimatedCostValue.textContent = '$0.00';
+                
+                // Show simplified token pricing for Deepgram AI features
+                // Combined from $0.0003/1k input tokens + $0.0006/1k output tokens
+                if (selectedModel === 'nova-3') {
+                    if (isSummarizeEnabled) {
+                        summarizationCostRow.style.display = 'flex';
+                        summarizationCostValue.textContent = '$0.0009/1k tokens';
+                    }
+                    
+                    if (isTopicsEnabled) {
+                        topicDetectionCostRow.style.display = 'flex';
+                        topicDetectionCostValue.textContent = '$0.0009/1k tokens';
+                    }
+                }
+            }
+        }
+    }
+    function formatDuration(seconds) { if (isNaN(seconds) || seconds <= 0) return "0:00"; const m = Math.floor(seconds / 60); const s = Math.floor(seconds % 60); return `${m}:${s.toString().padStart(2, '0')}`; }
+
+    // --- Formatting & Misc ---
+    function formatTopics(topicsData) { if (!topicsData?.segments?.length) return '<p><i>No topics detected.</i></p>'; const uniqueTopics = new Set(); topicsData.segments.forEach(seg => seg.topics?.forEach(t => uniqueTopics.add(t.topic))); if (uniqueTopics.size === 0) return '<p><i>No specific topics identified.</i></p>'; let html = '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">'; uniqueTopics.forEach(topic => { html += `<span class="topic-tag">${topic}</span>`; }); html += '</div>'; return html; }
+    const languages = { latin: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', cyrillic: 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', japanese: 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん', korean: 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗㅛㅜㅠㅡㅣ', chinese: '的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对可她里后小么心多天而能好都然没日于起还发成', arabic: 'ابتثجحخدذرزسشصضطظعغفقكلمنهويءآأؤإئ', devanagari: 'अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह' }; // For typewriter
+    function formatTime(seconds) { if (isNaN(seconds) || seconds < 0) return "0:00"; const totalSeconds = Math.floor(seconds); const minutes = Math.floor(totalSeconds / 60); const secs = totalSeconds % 60; return `${minutes}:${secs.toString().padStart(2, '0')}`; } // Local JS time formatter
+
+    // Get consistent waveform colors
+    function getWaveformColors() {
+        return {
+            waveColor: getComputedStyle(document.body).getPropertyValue('--text-tertiary').trim(),
+            progressColor: getComputedStyle(document.body).getPropertyValue('--primary-color').trim()
+        };
+    }
+    
+    // Add completely new implementation of applyTheme that properly rebuilds waveforms
+    function applyTheme(themeName) {
+        // Clear the waveform container first to prevent them from stacking
+        const waveformEl = document.getElementById('waveform');
+        if (waveformEl) {
+            // Recreate the time display element with default 0:00 values
+            // This ensures we don't see stale timestamps when changing themes
+            waveformEl.innerHTML = '';
+            const timeDisplay = document.createElement('div');
+            timeDisplay.className = 'time-display';
+            timeDisplay.innerHTML = '<span class="time-left">0:00</span><span class="time-center"></span><span class="time-right">0:00</span>';
+            waveformEl.appendChild(timeDisplay);
+        }
+        
+        // Properly destroy any existing wavesurfer instances
+        if (wavesurfer) {
+            try {
+                wavesurfer.pause();
+                wavesurfer.destroy();
+                wavesurfer = null;
+            } catch(e) { console.warn("Error destroying wavesurfer:", e); }
+        }
+        
+        if (videoWavesurfer) {
+            try {
+                videoWavesurfer.pause();
+                videoWavesurfer.destroy();
+                videoWavesurfer = null;
+            } catch(e) { console.warn("Error destroying videoWavesurfer:", e); }
+        }
+        
+        // Apply theme changes
+        document.body.classList.remove('Toffee-theme', 'minty-theme', 'nova-theme');
+        if (themeName !== 'light') document.body.classList.add(`${themeName}-theme`);
+
+        // Update active state for all theme buttons
+        document.querySelectorAll('.button-tab[data-theme]').forEach(btn => {
+            if (btn.dataset.theme === themeName) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Save state for audio/video
+        const audioURL = currentPreviewedFile?.objectURL;
+        
+        // Recreate waveform if needed with a slight delay to ensure DOM is updated
+        setTimeout(() => {
+            if (currentPreviewedFile && audioURL) {
+                if (currentPreviewedFile.type.startsWith('audio/')) {
+                    // Reinitialize audio wavesurfer
+                    const colors = getWaveformColors();
+                    wavesurfer = WaveSurfer.create({ 
+                        container: '#waveform', 
+                        waveColor: colors.waveColor, 
+                        progressColor: colors.progressColor, 
+                        height: 60, responsive: true, 
+                        backend: 'MediaElement', 
+                        mediaControls: false, 
+                        normalize: true, 
+                        partialRender: true 
+                    });
+                    
+                    wavesurfer.isReady = false;
+                    wavesurfer.load(audioURL);
+                    wavesurfer.on('ready', () => { 
+                        wavesurfer.isReady = true;
+                        currentFileDuration = wavesurfer.getDuration() || 0;
+                        document.querySelector(".time-right").textContent = formatTime(currentFileDuration);
+                        document.querySelector(".time-left").textContent = "0:00";
+                        setupPlayerEventHandlers();
+                        attachSyncToPlayer();
+                    });
+                }
+                else if (currentPreviewedFile.type.startsWith('video/')) {
+                    // Reinitialize video waveform
+                    initializeVideoWaveform(audioURL);
+                    // Ensure proper event handlers for video waveform
+                    videoWavesurfer.on('ready', () => {
+                        videoWavesurfer.isReady = true;
+                        currentFileDuration = videoWavesurfer.getDuration() || 0;
+                        document.querySelector(".time-right").textContent = formatTime(currentFileDuration);
+                        document.querySelector(".time-left").textContent = "0:00";
+                        attachSyncToPlayer();
+                        setupPlayerEventHandlers();
+                    });
+                }
+            }
+
+            // Reset the theme change flag once processing is complete
+            themeChangeInProgress = false;
+        }, 100);
+    }
+
+    let themeChangeInProgress = false; // Flag to track theme change status
+
+    function switchTheme(themeName) { 
+        // Skip if same theme change is already in progress
+        if (themeChangeInProgress) return;
+        
+        themeChangeInProgress = true; // Set flag
+        applyTheme(themeName); 
+        localStorage.setItem('theme', themeName); 
+        showToast('info', 'Theme Changed', `Switched to ${themeName.charAt(0).toUpperCase() + themeName.slice(1)} theme`); 
+    }
+    
+    function switchSidebarContent(contentType) {
+        // Update active state on buttons
+        document.querySelectorAll('.button-tab[data-content]').forEach(btn => {
+            if (btn.dataset.content === contentType) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        
+        // Toggle content visibility
+        const mainContent = document.getElementById('mainContent');
+        const modelInfoContent = document.getElementById('modelInfoContent');
+        
+        if (contentType === 'main') {
+            mainContent.style.display = 'block';
+            modelInfoContent.style.display = 'none';
+        } else if (contentType === 'model-info') {
+            mainContent.style.display = 'none';
+            modelInfoContent.style.display = 'block';
+        }
+    }
+    
+  </script>
+</body>
+</html>
