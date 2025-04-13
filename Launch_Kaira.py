@@ -9,7 +9,8 @@ import openai
 import whisper
 import requests
 import json
-import re # Make sure re is imported
+import re
+import mutagen  # For audio duration, especially for GPT-4o fallback
 
 app = Flask(__name__, template_folder=".")
 app.config['SECRET_KEY'] = 'secret!'
@@ -18,14 +19,30 @@ if not os.path.exists(TEMP_FOLDER):
     os.makedirs(TEMP_FOLDER)
 app.config['TEMP_FOLDER'] = TEMP_FOLDER
 
-# Configure SocketIO with longer ping timeout to prevent disconnections
+# Configure SocketIO with longer timeouts
 socketio = SocketIO(app, async_mode='threading', ping_timeout=60, ping_interval=25, cors_allowed_origins="*")
 
-# Global dictionaries to track cancellations and saved transcriptions
-# Structure: { job_id: { model_option: { ..., elapsed_time: int } } }
-transcriptions = {}
-cancellations = {}
+# Global structures
+transcriptions = {}  # { job_id: { model_option: { "srt_text":..., etc. } } }
+cancellations = {}   # { job_id: bool }
 
+######################################################
+# MIME TYPE MAP (shared among providers)
+######################################################
+mime_types_map = {
+    ".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/m4a",
+    ".mp4": "video/mp4", ".webm": "video/webm", ".ogg": "audio/ogg",
+    ".flac": "audio/flac", ".aac": "audio/aac", ".opus": "audio/opus",
+    ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+    ".mov": "video/quicktime", ".wmv": "video/x-ms-wmv",
+    ".flv": "video/x-flv", ".3gp": "video/3gpp", ".aiff": "audio/aiff",
+    ".aif": "audio/aiff"
+}
+
+######################################################
+# TIME FORMATTING + TRANSCRIPT GENERATORS
+# (unchanged utility functions)
+######################################################
 def format_time(seconds):
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
@@ -33,7 +50,6 @@ def format_time(seconds):
     milliseconds = int((seconds - int(seconds)) * 1000)
     return f"{hours:02}:{minutes:02}:{secs:02},{milliseconds:03}"
 
-# Each entry is wrapped as a transcript-segment to allow real-time highlighting when media is playing
 def generate_synced_transcript_from_segments(segments):
     transcript_output = ""
     for seg in segments:
@@ -79,7 +95,6 @@ def generate_vtt_from_segments(segments):
     return output.strip()
 
 def generate_tsv_from_segments(segments):
-    # HTML table version. Each row is a transcript-segment with data attributes
     output = '<table class="tsv-table"><thead><tr><th style="opacity: 0.5;">Segment</th><th style="opacity: 0.5;">Start</th><th style="opacity: 0.5;">End</th><th>Text</th></tr></thead><tbody>'
     for i, seg in enumerate(segments, start=1):
         start_time = format_time(seg["start"])
@@ -91,7 +106,6 @@ def generate_tsv_from_segments(segments):
     return output
 
 def generate_plain_tsv_from_segments(segments):
-    # Plain text TSV (for download)
     output = "Segment\tStart\tEnd\tText\n"
     for i, seg in enumerate(segments, start=1):
         start_time = format_time(seg["start"])
@@ -100,7 +114,7 @@ def generate_plain_tsv_from_segments(segments):
     return output.strip()
 
 def generate_plain_srt_from_segments(segments):
-    """Generate a plain text SRT file format from segments for download"""
+    """Generate a plain text SRT file from segments for download."""
     output = ""
     for i, seg in enumerate(segments, start=1):
         start_time = format_time(seg["start"])
@@ -108,115 +122,1006 @@ def generate_plain_srt_from_segments(segments):
         output += f"{i}\n{start_time} --> {end_time}\n{seg['text'].strip()}\n\n"
     return output.strip()
 
-def generate_plain_srt_from_deepgram(result):
-    """Generate SRT format directly from Deepgram API response structure"""
-    output = ""
-    index = 1
-    segments_for_fallback = [] # Keep track for fallback
-
-    # Check for utterances first (preferred with Nova-3)
-    if "results" in result and "utterances" in result["results"]:
-        utterances = result["results"]["utterances"]
-        print(f"Generating SRT from {len(utterances)} utterances")
-        for i, utterance in enumerate(utterances, start=1):
-            start_time = format_time(utterance["start"])
-            end_time = format_time(utterance["end"])
-            text = utterance["transcript"].strip()
-            output += f"{i}\n{start_time} --> {end_time}\n{text}\n\n"
-            segments_for_fallback.append({"start": utterance["start"], "end": utterance["end"], "text": text}) # Collect for fallback
-        return output.strip()
-
-    # If no utterances, try alternatives path
-    elif "results" in result and "channels" in result["results"] and len(result["results"]["channels"]) > 0:
-        channels = result["results"]["channels"]
-        for channel_idx, channel in enumerate(channels):
-            if "alternatives" in channel and len(channel["alternatives"]) > 0:
-                alternative = channel["alternatives"][0]
-                # Try paragraphs first
-                if "paragraphs" in alternative:
-                    paragraphs_data = alternative["paragraphs"]
-                    paragraphs = paragraphs_data.get("paragraphs", paragraphs_data) # Handle both dict and list
-                    print(f"Generating SRT from {len(paragraphs)} paragraphs")
-                    for para in paragraphs:
-                        start = para.get("start", 0)
-                        end = para.get("end", 0)
-                        text = None
-                        if "sentences" in para and para["sentences"]:
-                            for sentence in para["sentences"]:
-                                s_start = sentence.get("start", start)
-                                s_end = sentence.get("end", end)
-                                s_text = sentence.get("text", "").strip()
-                                if s_text:
-                                    output += f"{index}\n{format_time(s_start)} --> {format_time(s_end)}\n{s_text}\n\n"
-                                    segments_for_fallback.append({"start": s_start, "end": s_end, "text": s_text})
-                                    index += 1
-                            continue
-                        elif "transcript" in para:
-                            text = para["transcript"]
-                        if text:
-                            text = text.strip()
-                            output += f"{index}\n{format_time(start)} --> {format_time(end)}\n{text}\n\n"
-                            segments_for_fallback.append({"start": start, "end": end, "text": text})
-                            index += 1
-                    if output: return output.strip() # Return if paragraphs worked
-
-                # If no paragraphs, try words
-                elif "words" in alternative:
-                    words = alternative["words"]
-                    current_text = ""
-                    current_start = 0
-                    current_end = 0 # Initialize end time
-                    print(f"Generating SRT from {len(words)} words")
-                    for word in words:
-                        word_text = word.get("punctuated_word", word.get("word", "")).strip()
-                        if not word_text: continue # Skip empty words
-
-                        if not current_text:
-                            current_start = word["start"]
-
-                        current_text += (" " if current_text else "") + word_text
-                        current_end = word["end"] # Update end time with each word
-
-                        # Create a new segment after punctuation or every ~12 words
-                        if (word_text.endswith((".", "?", "!")) or len(current_text.split()) >= 12):
-                            output += f"{index}\n{format_time(current_start)} --> {format_time(current_end)}\n{current_text.strip()}\n\n"
-                            segments_for_fallback.append({"start": current_start, "end": current_end, "text": current_text.strip()})
-                            index += 1
-                            current_text = ""
-
-                    # Add the last segment if any
-                    if current_text:
-                        output += f"{index}\n{format_time(current_start)} --> {format_time(current_end)}\n{current_text.strip()}\n\n"
-                        segments_for_fallback.append({"start": current_start, "end": current_end, "text": current_text.strip()})
-                    if output: return output.strip() # Return if words worked
-
-    # Fallback if no segments could be parsed
-    print("Falling back to segment-based SRT generation from Deepgram response.")
-    if not segments_for_fallback: # If we didn't collect any segments during processing
-        segments_for_fallback = extract_segments_from_deepgram_response(result) # Extract fresh
-    return generate_plain_srt_from_segments(segments_for_fallback)
-
-
+######################################################
+# Additional utility for measuring tokens
+######################################################
 def calculate_token_count(text, model_name="gpt-4"):
-    """Estimates token count using a simple word-based approximation."""
     if not text:
         return 0
-    
-    return len(text.split())
+    return len(re.findall(r'\w+', text))
 
+######################################################
+# Utility to parse response segments or fallback
+######################################################
+def estimate_segments_from_text(full_text, audio_filepath):
+    """
+    Estimates segments with approximate timings if the API doesn't
+    provide them. Uses mutagen to get duration, or fallback to word-based.
+    """
+    segments = []
+    duration = 0.0
+    try:
+        audio_info = mutagen.File(audio_filepath)
+        if audio_info and hasattr(audio_info, 'info') and hasattr(audio_info.info, 'length'):
+            duration = audio_info.info.length
+        else:
+            raise ValueError("mutagen couldn't determine audio duration.")
+    except Exception as e:
+        # Fallback to average speaking rate
+        word_count = len(re.findall(r'\w+', full_text))
+        if word_count > 0:
+            duration = word_count * 0.4
+        else:
+            duration = 1.0
+
+    if not full_text or duration <= 0:
+        return [{"start": 0, "end": max(duration, 1.0), "text": full_text or "[Empty Transcript]"}]
+
+    # Try to split by sentence punctuation
+    sentences = re.split(r'(?<=[.!?])\s+', full_text.strip())
+
+    # If we only get 1 big sentence or they're too big, chunk by words
+    if not sentences or len(sentences) <= 1:
+        words = re.findall(r'\S+', full_text)
+        chunk_size = 15
+        sentences = [' '.join(words[i:i+chunk_size]) for i in range(0, len(words), chunk_size)]
+
+    total_chars = len(full_text)
+    start_time = 0.0
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        seg_chars = len(sentence)
+        seg_duration = (seg_chars / total_chars) * duration if total_chars > 0 else 0
+        seg_duration = max(seg_duration, 0.1)
+        end_time = min(start_time + seg_duration, duration)
+        start_time = min(start_time, end_time)
+
+        segments.append({
+            "start": start_time,
+            "end": end_time,
+            "text": sentence
+        })
+        start_time = end_time
+
+    # Ensure the last segment ends exactly at total duration
+    if segments:
+        segments[-1]["end"] = duration
+
+    return segments
+
+######################################################
+# Simple HTML → plain text converters
+######################################################
+def html_to_plain_text(html_content):
+    if not html_content:
+        return ""
+    # Remove the <button> bits
+    plain_text = re.sub(r'<button.*?seek-btn.*?</button>', '', html_content, flags=re.IGNORECASE | re.DOTALL)
+    # Remove obvious tags
+    plain_text = re.sub(r'<div class="segment-number".*?>.*?</div>', '', plain_text, flags=re.IGNORECASE | re.DOTALL)
+    plain_text = re.sub(r'<div class="srt-index".*?>.*?</div>', '', plain_text, flags=re.IGNORECASE | re.DOTALL)
+    plain_text = re.sub(r'<div class="srt-timing".*?>.*?</div>', '', plain_text, flags=re.IGNORECASE | re.DOTALL)
+    plain_text = re.sub(r'<div class="vtt-timing".*?>.*?</div>', '', plain_text, flags=re.IGNORECASE | re.DOTALL)
+    plain_text = re.sub(r'<div class="vtt-header".*?>.*?</div>', '', plain_text, flags=re.IGNORECASE | re.DOTALL)
+    # Remove all remaining tags
+    plain_text = re.sub(r'<[^>]+>', ' ', plain_text)
+    # Collapse whitespace
+    plain_text = re.sub(r'\s+', ' ', plain_text).strip()
+    return plain_text
+
+def html_to_plain_srt(srt_html):
+    if not srt_html:
+        return ""
+    output = ""
+    regex = re.compile(
+        r'<div class="transcript-segment"[^>]*>.*?'
+        r'<div class="srt-index[^>]*>(\d+)</div>.*?'
+        r'<div class="srt-timing[^>]*>([^<]+)</div>.*?'
+        r'<div class="srt-text[^>]*>(.*?)</div>.*?'
+        r'</div>', re.DOTALL | re.IGNORECASE
+    )
+    segments = regex.findall(srt_html)
+    for index, timing, text_html in segments:
+        clean_text = re.sub(r'<[^>]+>', '', text_html).strip()
+        clean_timing = timing.strip()
+        output += f"{index}\n{clean_timing}\n{clean_text}\n\n"
+    return output.strip()
+
+def html_to_plain_vtt(vtt_html):
+    if not vtt_html:
+        return "WEBVTT\n\n"
+    output = ""
+    header_match = re.search(r'<div class="vtt-header[^>]*>(.*?)</div>', vtt_html, re.IGNORECASE | re.DOTALL)
+    if header_match:
+        output += re.sub(r'<[^>]+>', '', header_match.group(1)).strip() + "\n\n"
+    else:
+        output += "WEBVTT\n\n"
+
+    block_regex = re.compile(
+        r'<div class="transcript-segment vtt-entry"[^>]*>.*?'
+        r'<div class="vtt-timing[^>]*>([^<]+)</div>.*?'
+        r'<div class="vtt-text[^>]*>(.*?)</div>.*?'
+        r'</div>', re.DOTALL | re.IGNORECASE
+    )
+    segments = block_regex.findall(vtt_html)
+    for timing, text_html in segments:
+        clean_text = re.sub(r'<[^>]+>', '', text_html).strip()
+        output += f"{timing.strip()}\n{clean_text}\n\n"
+    return output.strip()
+
+######################################################
+# UTILITY: Build all transcript formats
+######################################################
+def build_all_transcript_formats(segments):
+    """
+    Given a list of segments with {start, end, text},
+    generate every needed HTML or plaintext variant.
+    """
+    srt_text = generate_srt_from_segments(segments)
+    default_transcript = generate_synced_transcript_from_segments(segments)
+    numbered_transcript = generate_numbered_transcript_from_segments(segments)
+    vtt_text = generate_vtt_from_segments(segments)
+    tsv_html = generate_tsv_from_segments(segments)
+    tsv_plain = generate_plain_tsv_from_segments(segments)
+    plain_srt_for_download = generate_plain_srt_from_segments(segments)
+
+    return {
+        "srt_text": srt_text,
+        "default_transcript": default_transcript,
+        "numbered_transcript": numbered_transcript,
+        "vtt_text": vtt_text,
+        "tsv_text": tsv_html,
+        "tsv_plain": tsv_plain,
+        "plain_srt": plain_srt_for_download
+    }
+
+######################################################
+# UTILITY: Store results and emit final events
+######################################################
+def store_and_emit_transcription_results(
+    job_id, model_name, segments,
+    start_time, language="auto-detected",
+    token_count=None, summary_text=None,
+    topics_data=None
+):
+    """
+    1) Builds all transcript formats from the segments,
+    2) Stores them in `transcriptions` global,
+    3) Emits final SocketIO events for success.
+    """
+    elapsed = int(time.time() - start_time)
+    transcript_formats = build_all_transcript_formats(segments)
+
+    # Convert the default transcript to plain text for token counting if needed
+    if token_count is None:
+        plain_text = html_to_plain_text(transcript_formats["default_transcript"])
+        token_count = calculate_token_count(plain_text, model_name)
+
+    # Make sure the job dict exists
+    if job_id not in transcriptions:
+        transcriptions[job_id] = {}
+
+    # Combine the transcript formats + additional fields
+    transcriptions[job_id][model_name] = {
+        **transcript_formats,  # SRT, VTT, TSV, etc.
+        "task": "transcribe",
+        "language": language,
+        "token_count": token_count,
+        "elapsed_time": elapsed
+    }
+
+    # If we have special fields like summary or topics, store them
+    if summary_text is not None:
+        transcriptions[job_id][model_name]["summary_text"] = summary_text
+    if topics_data is not None:
+        transcriptions[job_id][model_name]["topics_data"] = topics_data
+
+    # Emit final "progress" and "complete" events
+    socketio.emit("progress_update", {
+        "job_id": job_id,
+        "progress": 100,
+        "message": "Transcription complete",
+        "elapsed": elapsed,
+        "remaining": 0
+    }, room=job_id)
+
+    socketio.emit("transcription_complete", {
+        "job_id": job_id,
+        "model_option": model_name,
+        "task": "transcribe",
+        "language": language,
+        **transcript_formats,  # srt_text, default_transcript, etc.
+        "token_count": token_count,
+        "elapsed_time": elapsed,
+        # Include summary/topics if set
+        "summary_text": summary_text,
+        "topics_data": topics_data
+    }, room=job_id)
+
+    print(f"{model_name} transcription job {job_id} completed successfully.")
+
+######################################################
+# UTILITY: Clean up after job done
+######################################################
+def cleanup_temp(job_id, filepath, model=None):
+    """
+    Removes a temp file if it exists, pops the cancellation flag,
+    optionally handles model GPU cleanup, etc.
+    """
+    # If there's a model object (e.g., local Whisper), you can CPU/unload
+    if model is not None:
+        try:
+            if hasattr(model, 'to'):
+                model.to('cpu')  # Move off GPU
+            del model
+            print("Cleaned up model reference.")
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                print("Cleared CUDA cache.")
+        except Exception as model_err:
+            print(f"Model cleanup error: {model_err}")
+
+    if os.path.exists(filepath):
+        try:
+            os.remove(filepath)
+            print(f"Removed temp file: {filepath}")
+        except Exception as e:
+            print(f"Error removing temp file {filepath}: {e}")
+
+    cancellations.pop(job_id, None)
+    print(f"Cleanup done for job {job_id}.")
+
+######################################################
+# UTILITY: Improve segments
+######################################################
+def improve_segments(segments):
+    """
+    Placeholder for any segment improvement logic.
+    This could be a function that takes in segments and returns improved segments.
+    """
+    return segments
+
+######################################################
+# UTILITY: Extract full text from result
+######################################################
+def extract_full_text_from_result(result):
+    """
+    Placeholder for extracting full text from a result.
+    This could be a function that takes in a result and returns the full text.
+    """
+    return ""
+
+######################################################
+# ROUTE: index
+######################################################
 @app.route('/', methods=['GET'])
 def index():
     return render_template('Kaira_Transcribe_Panel.html')
 
-# ------------------------------
-# API Transcription Routes
-# ------------------------------
+######################################################
+# Background tasks for each STT approach
+######################################################
+
+# 1) OpenAI Whisper-1
+def openai_whisper1_transcription(job_id, filepath, api_key):
+    start_time = time.time()
+    model_name = "whisper-1"
+    try:
+        if cancellations.get(job_id, False):
+            return
+
+        socketio.emit("progress_update", {
+            "job_id": job_id,
+            "progress": 30,
+            "message": f"Starting OpenAI {model_name} transcription",
+            "elapsed": 0,
+            "remaining": 0
+        }, room=job_id)
+
+        openai.api_key = api_key
+        with open(filepath, "rb") as audio_file:
+            try:
+                # Some versions:
+                #   openai.Audio.transcribe(model_name, audio_file, response_format="verbose_json")
+                # Others might have:
+                #   openai.OpenAI(api_key=...).audio.transcriptions.create(model=..., file=..., ...)
+                response = openai.Audio.transcribe(
+                    model=model_name,
+                    file=audio_file,
+                    response_format="verbose_json"
+                )
+            except Exception as e:
+                raise Exception(f"OpenAI API error: {e}")
+
+        if cancellations.get(job_id, False):
+            return
+
+        if not isinstance(response, dict):
+            response = dict(response)
+
+        segments = []
+        if "segments" in response and response["segments"]:
+            segments = response["segments"]
+        elif "text" in response:
+            # Fallback
+            segments = estimate_segments_from_text(response["text"], filepath)
+        else:
+            raise Exception("No segments or text returned by whisper-1")
+
+        language = response.get("language", "auto-detected")
+
+        # Store & emit
+        store_and_emit_transcription_results(
+            job_id=job_id,
+            model_name=model_name,
+            segments=segments,
+            start_time=start_time,
+            language=language
+        )
+    except Exception as e:
+        print(f"Error in OpenAI {model_name} transcription: {e}")
+        if not cancellations.get(job_id, False):
+            socketio.emit("transcription_failed", {
+                "job_id": job_id,
+                "model_option": model_name,
+                "error": str(e)
+            }, room=job_id)
+    finally:
+        cleanup_temp(job_id, filepath)
+
+# 2) OpenAI GPT-4o family
+def openai_gpt4o_family_transcription(job_id, filepath, api_key, model_name, prompt=None):
+    """
+    Handles both 'gpt-4o-transcribe' and 'gpt-4o-mini-transcribe'.
+    Allows optional prompt to customize transcription behavior.
+    """
+    start_time = time.time()
+    try:
+        if cancellations.get(job_id, False):
+            return
+
+        socketio.emit("progress_update", {
+            "job_id": job_id,
+            "progress": 30,
+            "message": f"Starting OpenAI {model_name} transcription",
+            "elapsed": 0,
+            "remaining": 0
+        }, room=job_id)
+
+        openai.api_key = api_key
+        with open(filepath, "rb") as audio_file:
+            # Setup transcription parameters with or without prompt
+            transcription_params = {
+                "model": model_name,
+                "file": audio_file,
+                "response_format": "json"
+            }
+            
+            # Only add prompt parameter if it was provided and not empty
+            if prompt and prompt.strip():
+                transcription_params["prompt"] = prompt
+                print(f"Using prompt for {model_name} transcription: {prompt[:100]}...")
+            
+            try:
+                # Try new OpenAI package version first (v1.0.0+)
+                try:
+                    from openai import OpenAI
+                    client = OpenAI(api_key=api_key)
+                    response = client.audio.transcriptions.create(**transcription_params)
+                except (ImportError, AttributeError):
+                    # Fall back to older version (v0.x.x)
+                    response = openai.Audio.transcribe(**transcription_params)
+
+                if not isinstance(response, dict):
+                    response = response.model_dump() if hasattr(response, 'model_dump') else dict(response)
+            except Exception as api_err:
+                print(f"Error calling OpenAI API for {model_name}: {api_err}")
+                raise Exception(f"OpenAI API Error ({model_name}): {str(api_err)}")
+
+        if cancellations.get(job_id, False):
+             return
+
+        full_text = response.get("text", "")
+        language = response.get("language", "auto-detected")
+        if not full_text.strip():
+            # Empty text fallback
+            segments = [{
+                "start": 0,
+                "end": 1,
+                "text": "[No transcript returned]"
+            }]
+        else:
+            segments = estimate_segments_from_text(full_text, filepath)
+
+        store_and_emit_transcription_results(
+            job_id=job_id,
+            model_name=model_name,
+            segments=segments,
+            start_time=start_time,
+            language=language
+        )
+    except Exception as e:
+        print(f"Error in OpenAI {model_name} transcription: {e}")
+        if not cancellations.get(job_id, False):
+            socketio.emit("transcription_failed", {
+                "job_id": job_id,
+                "model_option": model_name,
+                "error": str(e)
+            }, room=job_id)
+    finally:
+        cleanup_temp(job_id, filepath)
+
+# 3) Deepgram
+def extract_segments_from_deepgram_response(result):
+    """Original logic from the code that tries utterances, paragraphs, words, etc."""
+    # (Unchanged logic for extracting segments from the Deepgram response)
+    segments = []
+    if not result or "results" not in result:
+        return segments
+
+    results_data = result["results"]
+    # Prefer utterances
+    if "utterances" in results_data and results_data["utterances"]:
+        for utt in results_data["utterances"]:
+            segments.append({
+                "start": utt.get("start", 0),
+                "end": utt.get("end", 0),
+                "text": utt.get("transcript", "").strip()
+            })
+        return segments # Return after finding utterances
+
+    # Fallback to channels + paragraphs + words, etc.
+    if "channels" in results_data and len(results_data["channels"]) > 0:
+        channel = results_data["channels"][0]
+        if "alternatives" in channel and len(channel["alternatives"]) > 0:
+            alt = channel["alternatives"][0]
+            
+            # First try paragraphs if available
+            if "paragraphs" in alt and "paragraphs" in alt["paragraphs"]:
+                for para in alt["paragraphs"]["paragraphs"]:
+                    segments.append({
+                        "start": para.get("start", 0),
+                        "end": para.get("end", 0),
+                        "text": para.get("text", "").strip()
+                    })
+                return segments
+            
+            # Then try words as a last resort
+            elif "words" in alt:
+                words = alt["words"]
+                if not words:
+                    return segments
+                    
+                # Group words into reasonable segments (e.g., ~10 words per segment)
+                chunk_size = 10
+                for i in range(0, len(words), chunk_size):
+                    chunk = words[i:i+chunk_size]
+                    if chunk:
+                        segments.append({
+                            "start": chunk[0].get("start", 0),
+                            "end": chunk[-1].get("end", 0),
+                            "text": " ".join(w.get("word", "") for w in chunk).strip()
+                        })
+                return segments
+
+    # If we get here with no segments, return empty
+    return segments
+
+def extract_full_text_from_deepgram(result):
+    """Try to get the full transcript text from the first alternative."""
+    try:
+        if (result.get("results") and
+            result["results"].get("channels") and
+            len(result["results"]["channels"]) > 0):
+            alt = result["results"]["channels"][0]["alternatives"][0]
+            if "transcript" in alt:
+                return alt["transcript"].strip()
+    except:
+        pass
+    return ""
+
+def deepgram_ai_features(api_key, full_text, do_summarize=False, do_topics=False):
+    """
+    Calls Deepgram's summarization/topics if requested.
+    Returns (summary_text, topics_data).
+    """
+    summary_text, topics_data = None, None
+    headers = {
+        "Authorization": f"Token {api_key}",
+        "Content-Type": "application/json"
+    }
+    data_payload = {"text": full_text}
+    params = {"language": "en"}  # Summaries/Topics only supported in English
+    # If we wanted to skip if not English, you'd check the language first.
+
+    # Summarize
+    if do_summarize:
+        summary_params = dict(params, summarize="true")
+        try:
+            r = requests.post("https://api.deepgram.com/v1/read",
+                              params=summary_params, headers=headers,
+                              json=data_payload)
+            if r.status_code == 200:
+                jr = r.json()
+                summary_text = jr["results"]["summary"].get("text", None)
+        except Exception as e:
+            print(f"Deepgram summary error: {e}")
+
+    # Topics
+    if do_topics:
+        topics_params = dict(params, topics="true")
+        try:
+            r = requests.post("https://api.deepgram.com/v1/read",
+                              params=topics_params, headers=headers,
+                              json=data_payload)
+            if r.status_code == 200:
+                jr = r.json()
+                topics_data = jr["results"].get("topics", None)
+        except Exception as e:
+            print(f"Deepgram topics error: {e}")
+
+    return summary_text, topics_data
+
+def deepgram_transcription(job_id, filepath, api_key, summarize_enabled=False, topics_enabled=False):
+    start_time = time.time()
+    model_name = "nova-3"
+    summary_text = None
+    topics_data = None
+    detected_language = "multi"
+
+    try:
+        if cancellations.get(job_id, False):
+            return
+
+        socketio.emit("progress_update", {
+            "job_id": job_id,
+            "progress": 30,
+            "message": f"Starting Deepgram {model_name} transcription",
+            "elapsed": 0,
+            "remaining": 0
+        }, room=job_id)
+
+        file_ext = os.path.splitext(filepath)[1].lower()
+        content_type = mime_types_map.get(file_ext, "application/octet-stream")
+        headers = {"Authorization": f"Token {api_key}", "Content-Type": content_type}
+
+        with open(filepath, "rb") as f:
+            file_content = f.read()
+
+        params = {
+            "model": model_name,
+            "language": "multi",
+            "diarize": "true",
+            "punctuate": "true",
+            "paragraphs": "true",
+            "utterances": "true",
+            "smart_format": "true"
+        }
+
+        response = requests.post("https://api.deepgram.com/v1/listen",
+                                 params=params, headers=headers, data=file_content)
+        if response.status_code != 200:
+            raise Exception(f"Deepgram error: {response.status_code}, {response.text}")
+
+        result = response.json()
+
+        segments = extract_segments_from_deepgram_response(result)
+        full_transcript_text = extract_full_text_from_deepgram(result)
+
+        # Fallback if no segments
+        if not segments and full_transcript_text:
+            segments = estimate_segments_from_text(full_transcript_text, filepath)
+
+        # Summaries/Topics if English, but skipping language check for brevity
+        if full_transcript_text and (summarize_enabled or topics_enabled):
+            summary_text, topics_data = deepgram_ai_features(
+                api_key, full_transcript_text,
+                do_summarize=summarize_enabled,
+                do_topics=topics_enabled
+            )
+
+        store_and_emit_transcription_results(
+            job_id=job_id,
+            model_name=model_name,
+            segments=segments,
+            start_time=start_time,
+            language=detected_language,
+            summary_text=summary_text,
+            topics_data=topics_data
+        )
+    except Exception as e:
+        print(f"Deepgram transcription error: {e}")
+        if not cancellations.get(job_id, False):
+            socketio.emit("transcription_failed", {
+                "job_id": job_id,
+                "model_option": model_name,
+                "error": str(e)
+            }, room=job_id)
+    finally:
+        cleanup_temp(job_id, filepath)
+
+# 4) Gladia
+def gladia_transcription(job_id, filepath, api_key):
+    start_time = time.time()
+    model_name = "gladia"
+    detected_language = "en"
+
+    try:
+        if cancellations.get(job_id, False):
+            return
+
+        socketio.emit("progress_update", {
+            "job_id": job_id,
+            "progress": 30,
+            "message": f"Starting Gladia transcription",
+            "elapsed": 0,
+            "remaining": 0
+        }, room=job_id)
+
+        filename = os.path.basename(filepath)
+        file_ext = os.path.splitext(filename)[1].lower()
+        mime_type = mime_types_map.get(file_ext, "application/octet-stream")
+        upload_headers = {"x-gladia-key": api_key}
+
+        # Step 1) Upload
+        with open(filepath, "rb") as audio_file:
+            files = {"audio": (filename, audio_file, mime_type)}
+            r = requests.post("https://api.gladia.io/v2/upload",
+                              headers=upload_headers, files=files)
+            r.raise_for_status()
+            upload_result = r.json()
+            audio_url = upload_result.get("audio_url")
+            if not audio_url:
+                raise Exception("No audio_url in Gladia upload response")
+
+        # Step 2) Request transcription
+        transcription_headers = {
+            "x-gladia-key": api_key,
+            "Content-Type": "application/json"
+        }
+        transcription_data = {
+            "audio_url": audio_url,
+            "language": "en",
+            "detect_language": False,
+            "translation": False,
+            "enable_code_switching": False,
+            "diarization": True,
+            "diarization_config": {
+                "number_of_speakers": None,
+                "min_speakers": 1,
+                "max_speakers": 5,
+                "enhanced": True
+            },
+            "subtitles": True,
+            "subtitles_config": {
+                "formats": ["srt", "vtt"],
+                "maximum_characters_per_row": 40,
+                "maximum_rows_per_caption": 2
+            }
+        }
+        socketio.emit("progress_update", {
+            "job_id": job_id,
+            "progress": 50,
+            "message": "Processing with Gladia API",
+            "elapsed": int(time.time() - start_time),
+            "remaining": 0
+        }, room=job_id)
+        tresp = requests.post("https://api.gladia.io/v2/pre-recorded",
+                              headers=transcription_headers, json=transcription_data)
+        tresp.raise_for_status()
+        tr_json = tresp.json()
+        transcription_id = tr_json.get("id")
+        result_url = tr_json.get("result_url")
+        if not transcription_id or not result_url:
+            raise Exception("Failed to get transcription ID or result_url from Gladia response")
+
+        # Step 3) Poll for results
+        max_retries = 60
+        polling_interval = 10
+        final_result = None
+        for attempt in range(max_retries):
+            if cancellations.get(job_id, False):
+                return
+            poll_resp = requests.get(result_url, headers={"x-gladia-key": api_key})
+            if poll_resp.status_code == 200:
+                prj = poll_resp.json()
+                status = prj.get("status")
+                if status == "done":
+                    final_result = prj
+                    break
+            time.sleep(polling_interval)
+
+        if not final_result or final_result.get("status") != "done":
+            raise Exception("Gladia transcription timed out or failed.")
+
+        transcript_data = final_result.get("result", {})
+        # Step 4) Extract segments
+        segments = []
+        if ("transcription" in transcript_data and
+            isinstance(transcript_data["transcription"], dict) and
+            "utterances" in transcript_data["transcription"]):
+            utterances = transcript_data["transcription"]["utterances"]
+            for u in utterances:
+                txt = str(u.get("text", "")).strip()
+                if txt:
+                    segments.append({
+                        "start": u.get("start", 0),
+                        "end": u.get("end", 0),
+                        "text": txt
+                    })
+        elif ("transcription" in transcript_data and
+              isinstance(transcript_data["transcription"], dict) and
+              "full_transcript" in transcript_data["transcription"]):
+            full_text = transcript_data["transcription"]["full_transcript"]
+            segments = estimate_segments_from_text(full_text, filepath)
+        else:
+            # fallback to SRT
+            subs = transcript_data.get("subtitles", {})
+            srt_content = subs.get("srt")
+            if srt_content:
+                # parse SRT or fallback
+                segments = []  # parse into segments if desired
+                # If no parse, estimate from the entire text
+                # ...
+        if not segments:
+            segments = [{
+                "start": 0, "end": 1,
+                "text": "Transcription done, but no segments found."
+            }]
+
+        store_and_emit_transcription_results(
+            job_id=job_id,
+            model_name=model_name,
+            segments=segments,
+            start_time=start_time,
+            language=detected_language
+        )
+    except Exception as e:
+        print(f"Gladia transcription error: {e}")
+        if not cancellations.get(job_id, False):
+            socketio.emit("transcription_failed", {
+                "job_id": job_id,
+                "model_option": model_name,
+                "error": str(e)
+            }, room=job_id)
+    finally:
+        cleanup_temp(job_id, filepath)
+
+# 5) ElevenLabs
+def extract_segments_from_elevenlabs_response(result):
+    segments = []
+    if not result or "words" not in result:
+        return segments
+
+    words_list = result["words"]
+    current_segment = None
+    max_words_per_segment = 15
+    max_gap_seconds = 1.0
+
+    for item in words_list:
+        item_type = item.get("type")
+        text = item.get("text", "").strip()
+        start = item.get("start")
+        end = item.get("end")
+
+        if item_type == "spacing":
+            continue
+
+        if start is None or end is None:
+            continue
+
+        start_new = False
+        if current_segment is None:
+            start_new = True
+        else:
+            gap = start - current_segment["end"]
+            prev_ends_sentence = current_segment["text"].endswith(('.', '!', '?'))
+            if (gap > max_gap_seconds or
+                current_segment["words_in_segment"] >= max_words_per_segment or
+                prev_ends_sentence):
+                start_new = True
+
+        if start_new and current_segment:
+            current_segment["text"] = current_segment["text"].strip()
+            if current_segment["text"]:
+                segments.append(current_segment)
+            current_segment = None
+
+        if start_new:
+            current_segment = {
+                "start": start,
+                "end": end,
+                "text": "",
+                "words_in_segment": 0
+            }
+
+        needs_space = current_segment["text"] and not current_segment["text"].endswith('[')
+        current_segment["text"] += (" " if needs_space else "") + text
+        current_segment["end"] = max(current_segment["end"], end)
+        if item_type == "word":
+             current_segment["words_in_segment"] += 1
+
+    if current_segment and current_segment["text"].strip():
+        segments.append(current_segment)
+
+    if not segments:
+        full_text = result.get("text", "").strip()
+        if full_text:
+            duration = words_list[-1]["end"] if words_list else 1.0
+            segments.append({
+                "start": 0,
+                "end": duration,
+                "text": full_text
+            })
+    return segments
+
+def elevenlabs_transcription(job_id, filepath, api_key, language_code=None):
+    start_time = time.time()
+    model_name = "scribe-v1"
+    try:
+        if cancellations.get(job_id, False):
+            return
+
+        socketio.emit("progress_update", {
+            "job_id": job_id,
+            "progress": 30,
+            "message": f"Starting ElevenLabs {model_name} transcription",
+            "elapsed": 0,
+            "remaining": 0
+        }, room=job_id)
+
+        headers = {"xi-api-key": api_key}
+        data = {
+            "model_id": "eleven_scribe_v1",
+            "diarize": "true",
+            "tag_audio_events": "true"
+        }
+        if language_code:
+            data["language_code"] = language_code
+
+        filename = os.path.basename(filepath)
+        file_ext = os.path.splitext(filename)[1].lower()
+        mime_type = mime_types_map.get(file_ext, "application/octet-stream")
+
+        socketio.emit("progress_update", {
+            "job_id": job_id,
+            "progress": 50,
+            "message": "Processing with ElevenLabs API",
+            "elapsed": int(time.time() - start_time),
+            "remaining": 0
+        }, room=job_id)
+
+        with open(filepath, "rb") as f:
+            files = {"file": (filename, f, mime_type)}
+            resp = requests.post("https://api.elevenlabs.io/v1/speech-to-text",
+                                 headers=headers, data=data, files=files)
+        if resp.status_code != 200:
+            error_msg = ""
+            try:
+                jerr = resp.json()
+                error_msg = jerr.get("detail", resp.text)
+            except:
+                error_msg = resp.text
+            raise Exception(f"ElevenLabs error: {resp.status_code}, {error_msg}")
+
+        result = resp.json()
+        detected_language = result.get("language_code", "auto-detected")
+        segments = extract_segments_from_elevenlabs_response(result)
+        if not segments:
+            segments = [{
+                "start": 0, "end": 1,
+                "text": "Error: no segments parsed."
+            }]
+
+        store_and_emit_transcription_results(
+            job_id=job_id,
+            model_name=model_name,
+            segments=segments,
+            start_time=start_time,
+            language=detected_language
+        )
+    except Exception as e:
+        print(f"Error in ElevenLabs transcription: {e}")
+        if not cancellations.get(job_id, False):
+            socketio.emit("transcription_failed", {
+                "job_id": job_id,
+                "model_option": model_name,
+                "error": str(e)
+            }, room=job_id)
+    finally:
+        cleanup_temp(job_id, filepath)
+
+######################################################
+# 6) Local Transcription (Whisper)
+######################################################
+def fast_transcription(job_id, file_path, model_option):
+    start_time = time.time()
+    local_model_key = model_option
+    model = None
+
+    try:
+        if cancellations.get(job_id, False):
+            return
+
+        socketio.emit("progress_update", {
+            "job_id": job_id,
+            "progress": 10,
+            "message": f"Loading {local_model_key} model...",
+            "elapsed": 0,
+            "remaining": 0
+        }, room=job_id)
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Example of a custom mapping
+        if local_model_key == "turbo":
+            local_model_key = "large-v2"  # Example mapping
+
+        model = whisper.load_model(local_model_key, device=device)
+
+        if cancellations.get(job_id, False):
+            return
+
+        socketio.emit("progress_update", {
+            "job_id": job_id,
+            "progress": 30,
+            "message": f"Transcribing with {local_model_key}...",
+            "elapsed": int(time.time() - start_time),
+            "remaining": 0
+        }, room=job_id)
+
+        options = {
+            "task": "transcribe",
+            "word_timestamps": True
+        }
+        if torch.cuda.is_available():
+            options["fp16"] = True
+
+        result = model.transcribe(file_path, **options)
+        segments = result.get("segments", [])
+        detected_language = result.get("language", "auto-detected")
+
+        # Basic post-processing or fallback
+        if not segments:
+            full_text = result.get("text", "").strip()
+            if full_text:
+                segments = estimate_segments_from_text(full_text, file_path)
+            else:
+                segments = [{
+                    "start": 0, "end": 1,
+                    "text": "[No speech detected]"
+                }]
+
+        store_and_emit_transcription_results(
+            job_id=job_id,
+            model_name=model_option,  # keep user-chosen name
+            segments=segments,
+            start_time=start_time,
+            language=detected_language
+        )
+    except Exception as e:
+        print(f"Error in local transcription: {e}")
+        if not cancellations.get(job_id, False):
+            socketio.emit("transcription_failed", {
+                "job_id": job_id,
+                "model_option": model_option,
+                "error": str(e)
+            }, room=job_id)
+    finally:
+        cleanup_temp(job_id, file_path, model=model)
+
+######################################################
+# ROUTES (front-end triggers)
+######################################################
 @app.route('/transcribe', methods=['POST'])
 def transcribe_api():
+    # For the "whisper-1" direct route
     api_key = request.form.get('api_key')
     file = request.files.get('file')
     job_id = request.form.get('job_id')
-
     if not api_key or not file or not job_id:
         return jsonify({"error": "API key, file, and job_id are required."}), 400
 
@@ -225,18 +1130,70 @@ def transcribe_api():
     file.save(filepath)
 
     cancellations[job_id] = False
-    socketio.start_background_task(api_transcription, job_id, filepath, api_key)
-
+    socketio.start_background_task(openai_whisper1_transcription, job_id, filepath, api_key)
     return jsonify({"job_id": job_id, "status": "started", "model_option": "whisper-1"})
 
+@app.route('/transcribe_openai_gpt4o', methods=['POST'])
+def transcribe_openai_gpt4o():
+    # "gpt-4o-transcribe"
+    api_key = request.form.get('api_key')
+    file = request.files.get('file')
+    job_id = request.form.get('job_id')
+    prompt = request.form.get('prompt')  # Get prompt from request
+    model_option = "gpt-4o-transcribe"
+    
+    if not api_key or not file or not job_id:
+        return jsonify({"error": "OpenAI API key, file, and job_id are required."}), 400
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['TEMP_FOLDER'], filename)
+    file.save(filepath)
+
+    cancellations[job_id] = False
+    socketio.start_background_task(
+        openai_gpt4o_family_transcription, 
+        job_id, 
+        filepath, 
+        api_key, 
+        model_option,
+        prompt  # Pass prompt to the transcription function
+    )
+    return jsonify({"job_id": job_id, "status": "started", "model_option": model_option})
+
+@app.route('/transcribe_openai_gpt4o_mini', methods=['POST'])
+def transcribe_openai_gpt4o_mini():
+    # "gpt-4o-mini-transcribe"
+    api_key = request.form.get('api_key')
+    file = request.files.get('file')
+    job_id = request.form.get('job_id')
+    prompt = request.form.get('prompt')  # Get prompt from request
+    model_option = "gpt-4o-mini-transcribe"
+    
+    if not api_key or not file or not job_id:
+        return jsonify({"error": "OpenAI API key, file, and job_id are required."}), 400
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['TEMP_FOLDER'], filename)
+    file.save(filepath)
+
+    cancellations[job_id] = False
+    socketio.start_background_task(
+        openai_gpt4o_family_transcription, 
+        job_id, 
+        filepath, 
+        api_key, 
+        model_option,
+        prompt  # Pass prompt to the transcription function
+    )
+    return jsonify({"job_id": job_id, "status": "started", "model_option": model_option})
+
 @app.route('/transcribe_deepgram', methods=['POST'])
-def transcribe_deepgram():
+def transcribe_deepgram_route():
     api_key = request.form.get('deepgram_api_key')
     file = request.files.get('file')
     job_id = request.form.get('job_id')
     summarize_enabled = request.form.get('summarize_enabled') == 'true'
     topics_enabled = request.form.get('topics_enabled') == 'true'
-
     if not api_key or not file or not job_id:
         return jsonify({"error": "Deepgram API key, file, and job_id are required."}), 400
 
@@ -246,15 +1203,13 @@ def transcribe_deepgram():
 
     cancellations[job_id] = False
     socketio.start_background_task(deepgram_transcription, job_id, filepath, api_key, summarize_enabled, topics_enabled)
-
     return jsonify({"job_id": job_id, "status": "started", "model_option": "nova-3"})
 
 @app.route('/transcribe_gladia', methods=['POST'])
-def transcribe_gladia():
+def transcribe_gladia_route():
     api_key = request.form.get('gladia_api_key')
     file = request.files.get('file')
     job_id = request.form.get('job_id')
-
     if not api_key or not file or not job_id:
         return jsonify({"error": "Gladia API key, file, and job_id are required."}), 400
 
@@ -264,520 +1219,29 @@ def transcribe_gladia():
 
     cancellations[job_id] = False
     socketio.start_background_task(gladia_transcription, job_id, filepath, api_key)
-
     return jsonify({"job_id": job_id, "status": "started", "model_option": "gladia"})
 
-def api_transcription(job_id, filepath, api_key):
-    start_time = time.time() # Start timer
-    try:
-        if cancellations.get(job_id, False): return
-        print(f"Starting API transcription for job ID: {job_id}")
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 30, "message": "Starting OpenAI API transcription", "elapsed": 0, "remaining": 0 }, room=job_id)
-
-        openai.api_key = api_key
-        with open(filepath, "rb") as audio_file:
-            try:
-                client = openai.OpenAI(api_key=api_key)
-                response = client.audio.transcriptions.create( model="whisper-1", file=audio_file, response_format="verbose_json", timestamp_granularities=["segment"] )
-                if not isinstance(response, dict): response = response.model_dump()
-            except (AttributeError, ImportError, TypeError):
-                 response = openai.Audio.transcribe( "whisper-1", audio_file, response_format="verbose_json" )
-                 if not isinstance(response, dict): response = response.__dict__
-
-        if cancellations.get(job_id, False): return
-
-        segments = []
-        if isinstance(response, dict) and "segments" in response:
-            socketio.emit("progress_update", { "job_id": job_id, "progress": 70, "message": "Processing transcript segments", "elapsed": 0, "remaining": 0 }, room=job_id)
-            segments = response["segments"]
-        elif isinstance(response, dict) and "text" in response:
-             text = response["text"]
-             words = text.split(); chunk_size = 20
-             for i in range(0, len(words), chunk_size):
-                 chunk = " ".join(words[i:i+chunk_size]); start_time_est = i / 2.5; end_time_est = min(len(words), i + chunk_size) / 2.5
-                 segments.append({"start": start_time_est, "end": end_time_est, "text": chunk})
-
-        if cancellations.get(job_id, False): return
-
-        srt_text = generate_srt_from_segments(segments)
-        default_transcript = generate_synced_transcript_from_segments(segments)
-        numbered_transcript = generate_numbered_transcript_from_segments(segments)
-        vtt_text = generate_vtt_from_segments(segments)
-        tsv_html = generate_tsv_from_segments(segments)
-        tsv_plain = generate_plain_tsv_from_segments(segments)
-        plain_srt_for_download = generate_plain_srt_from_segments(segments)
-        plain_text_for_tokens = html_to_plain_text(default_transcript)
-        token_count = calculate_token_count(plain_text_for_tokens, "whisper-1")
-        detected_language = response.get("language", "auto-detected") # Get detected language
-        elapsed = time.time() - start_time # Calculate elapsed time
-
-        if job_id not in transcriptions: transcriptions[job_id] = {}
-        transcriptions[job_id]["whisper-1"] = {
-            "srt_text": srt_text, "default_transcript": default_transcript, "numbered_transcript": numbered_transcript,
-            "vtt_text": vtt_text, "tsv_text": tsv_html, "tsv_plain": tsv_plain, "plain_srt": plain_srt_for_download,
-            "task": "transcribe", "language": detected_language, "token_count": token_count, "elapsed_time": int(elapsed) # Store elapsed time
-        }
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 100, "message": "Transcription complete", "elapsed": 0, "remaining": 0 }, room=job_id)
-        socketio.emit("transcription_complete", {
-            "job_id": job_id, "model_option": "whisper-1", "task": "transcribe", "language": detected_language,
-            "srt_text": srt_text, "default_transcript": default_transcript, "numbered_transcript": numbered_transcript,
-            "vtt_text": vtt_text, "tsv_text": tsv_html, "tsv_plain": tsv_plain, "plain_srt": plain_srt_for_download,
-            "token_count": token_count, "elapsed_time": int(elapsed) # Send elapsed time
-        }, room=job_id)
-    except Exception as e:
-        print(f"Error in API transcription: {str(e)}")
-        if not cancellations.get(job_id, False): socketio.emit("transcription_failed", { "job_id": job_id, "error": str(e) }, room=job_id)
-    finally:
-        if os.path.exists(filepath):
-            try: os.remove(filepath)
-            except: pass
-        cancellations.pop(job_id, None)
-
-
-def extract_segments_from_deepgram_response(result):
-    segments = []
-    try:
-        if not result or "results" not in result: return []
-        results_data = result["results"]
-        if "utterances" in results_data and results_data["utterances"]:
-            print(f"Extracting segments from {len(results_data['utterances'])} utterances.")
-            for utterance in results_data["utterances"]:
-                segments.append({"start": utterance.get("start", 0),"end": utterance.get("end", 0),"text": utterance.get("transcript", "").strip()})
-            if segments: return segments
-        if "channels" in results_data and results_data["channels"]:
-            alternative = results_data["channels"][0].get("alternatives", [{}])[0]
-            if "paragraphs" in alternative and alternative["paragraphs"]:
-                paragraphs_data = alternative["paragraphs"]
-                paragraphs_list = paragraphs_data.get("paragraphs", paragraphs_data) # Handle dict or list
-                print(f"Extracting segments from {len(paragraphs_list)} paragraphs.")
-                for para in paragraphs_list:
-                    para_start = para.get("start", 0); para_end = para.get("end", 0)
-                    if "sentences" in para and para["sentences"]:
-                        for sentence in para["sentences"]: segments.append({"start": sentence.get("start", para_start),"end": sentence.get("end", para_end),"text": sentence.get("text", "").strip()})
-                    elif "transcript" in para and para["transcript"].strip(): segments.append({"start": para_start,"end": para_end,"text": para["transcript"].strip()})
-                if segments: return segments
-            if "sentences" in alternative and alternative["sentences"]:
-                 print(f"Extracting segments from {len(alternative['sentences'])} sentences.")
-                 for sentence in alternative["sentences"]: segments.append({"start": sentence.get("start", 0),"end": sentence.get("end", 0),"text": sentence.get("text", "").strip()})
-                 if segments: return segments
-            if "words" in alternative and alternative["words"]:
-                words = alternative["words"]; print(f"Extracting segments from {len(words)} words.")
-                current_segment = {"text": "", "start": 0, "end": 0}; words_in_segment = 0
-                for word in words:
-                    if not current_segment["text"]: current_segment["start"] = word.get("start", 0)
-                    current_segment["text"] += (" " if current_segment["text"] else "") + word.get("punctuated_word", word.get("word", ""))
-                    current_segment["end"] = word.get("end", 0); words_in_segment += 1
-                    ends_with_punctuation = word.get("punctuated_word", "").strip().endswith(('.', '?', '!'))
-                    if (ends_with_punctuation or words_in_segment >= 15) and current_segment["text"].strip():
-                        segments.append(dict(current_segment))
-                        current_segment = {"text": "", "start": word.get("end", 0), "end": word.get("end", 0)}; words_in_segment = 0
-                if current_segment["text"].strip(): segments.append(current_segment)
-                if segments: return segments
-            if "transcript" in alternative and alternative["transcript"]:
-                full_transcript = alternative["transcript"].strip(); print(f"Warning: Falling back to splitting full transcript.")
-                sentences = re.split(r'(?<=[.!?])\s+', full_transcript)
-                duration = result.get("metadata", {}).get("duration", len(sentences) * 3); start_time = 0
-                time_per_sentence = duration / len(sentences) if sentences else 0
-                for sentence in sentences:
-                    sentence_text = sentence.strip()
-                    if sentence_text:
-                        end_time = start_time + time_per_sentence
-                        segments.append({"start": start_time,"end": end_time,"text": sentence_text})
-                        start_time = end_time
-                if segments: return segments
-    except Exception as e: print(f"Error during Deepgram segment extraction: {str(e)}")
-    if not segments: print("Warning: Could not extract any segments from Deepgram response.")
-    return segments
-
-def deepgram_transcription(job_id, filepath, api_key, summarize_enabled=False, topics_enabled=False):
-    start_time = time.time() # Start timer
-    summary_text = None
-    topics_data = None
-    detected_language = "multi" # Supports 10 languages (multi: English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian and Dutch)
-
-    try:
-        if cancellations.get(job_id, False): return
-        print(f"Starting Deepgram transcription for job ID: {job_id}")
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 30, "message": f"Starting Deepgram Nova-3 transcription", "elapsed": 0, "remaining": 0 }, room=job_id)
-
-        file_ext = os.path.splitext(filepath)[1].lower()
-        mime_types = { ".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/m4a", ".mp4": "video/mp4", ".webm": "video/webm", ".ogg": "audio/ogg", ".flac": "audio/flac" }
-        content_type = mime_types.get(file_ext, "audio/mpeg")
-        print(f"Using content type {content_type} for file {os.path.basename(filepath)}")
-
-        headers = { "Authorization": f"Token {api_key}", "Content-Type": content_type }
-        with open(filepath, "rb") as file: file_content = file.read()
-
-        # Build parameters
-        params = {
-            "model": "nova-3", "language": "multi", "diarize": "true", "punctuate": "true",
-            "paragraphs": "true", "utterances": "true", "smart_format": "true"
-        }
-
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 50, "message": "Processing with Deepgram API", "elapsed": 0, "remaining": 0 }, room=job_id)
-        print(f"Sending request to Deepgram API with params: {params}")
-        response = requests.post("https://api.deepgram.com/v1/listen", params=params, headers=headers, data=file_content)
-
-        if response.status_code != 200:
-            error_message = f"Deepgram API error: {response.status_code}, {response.text}"
-            print(error_message); raise Exception(error_message)
-
-        if cancellations.get(job_id, False): return
-
-        try:
-            result = response.json()
-            print("Deepgram API response received.")
-            # Check metadata for detected language
-            detected_language = result.get("metadata", {}).get("language", "multi")
-        except json.JSONDecodeError as e: raise Exception(f"Invalid JSON response from Deepgram: {str(e)}")
-
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 70, "message": "Processing transcript segments", "elapsed": 0, "remaining": 0 }, room=job_id)
-        segments = extract_segments_from_deepgram_response(result)
-        full_transcript_text = ""
-        try: # Extract full transcript for AI features
-            if "results" in result and "channels" in result["results"] and result["results"]["channels"]:
-                alternatives = result["results"]["channels"][0].get("alternatives", [{}])
-                if alternatives and "transcript" in alternatives[0]: full_transcript_text = alternatives[0]["transcript"]
-        except Exception as text_extract_err: print(f"Warning: Could not extract full transcript for AI features: {text_extract_err}")
-
-        # AI Feature Calls (Summarize/Topics)
-        if full_transcript_text and (summarize_enabled or topics_enabled):
-            print(f"Checking for AI features...")
-            text_intel_headers = { "Authorization": f"Token {api_key}", "Content-Type": "application/json" }
-            text_intel_payload = { "text": full_transcript_text }
-            # Note: Deepgram's AI features (summarization and topic detection) only work with English content
-            text_intel_params = { "language": "en" }  # Must use English for these features
-
-            if summarize_enabled:
-                socketio.emit("progress_update", { "job_id": job_id, "progress": 75, "message": "Requesting summary...", "elapsed": 0, "remaining": 0 }, room=job_id)
-                print("Requesting Summarization...")
-                try:
-                    summary_params = text_intel_params.copy(); summary_params["summarize"] = "true"
-                    summary_response = requests.post("https://api.deepgram.com/v1/read", params=summary_params, headers=text_intel_headers, json=text_intel_payload)
-                    if summary_response.status_code == 200:
-                        summary_result = summary_response.json()
-                        if "results" in summary_result and "summary" in summary_result["results"]:
-                            summary_text = summary_result["results"]["summary"].get("text")
-                            print(f"Summary received.")
-                        else: print(f"Warning: Summarization response structure unexpected.")
-                    else: print(f"Warning: Summarization API error {summary_response.status_code}: {summary_response.text}")
-                except Exception as summary_err: print(f"Error during Summarization API call: {summary_err}")
-
-            if topics_enabled:
-                socketio.emit("progress_update", { "job_id": job_id, "progress": 80, "message": "Requesting topic detection...", "elapsed": 0, "remaining": 0 }, room=job_id)
-                print("Requesting Topic Detection...")
-                try:
-                    topics_params = text_intel_params.copy(); topics_params["topics"] = "true"
-                    topics_response = requests.post("https://api.deepgram.com/v1/read", params=topics_params, headers=text_intel_headers, json=text_intel_payload)
-                    if topics_response.status_code == 200:
-                        topics_result = topics_response.json()
-                        if "results" in topics_result and "topics" in topics_result["results"]:
-                            topics_data = topics_result["results"]["topics"]
-                            print(f"Topic data received.")
-                        else: print(f"Warning: Topic Detection response structure unexpected.")
-                    else: print(f"Warning: Topic Detection API error {topics_response.status_code}: {topics_response.text}")
-                except Exception as topics_err: print(f"Error during Topic Detection API call: {topics_err}")
-
-        # Segment Fallback Logic
-        if not segments:
-            print("Critical: Segment extraction failed. Attempting fallback.")
-            if full_transcript_text:
-                 words = full_transcript_text.split(); chunk_size = 15
-                 duration = result.get("metadata", {}).get("duration", len(words) * 0.5)
-                 time_per_word = duration / len(words) if words else 0
-                 current_word_index = 0
-                 for i in range(0, len(words), chunk_size):
-                     chunk = " ".join(words[i:i+chunk_size])
-                     start_time_est = current_word_index * time_per_word
-                     end_word_index = min(len(words), i + chunk_size)
-                     end_time_est = end_word_index * time_per_word
-                     segments.append({ "start": start_time_est, "end": end_time_est, "text": chunk })
-                     current_word_index = end_word_index
-            else: segments = [{"start": 0, "end": 1, "text": "Error: Could not process Deepgram response."}]
-
-
-        if cancellations.get(job_id, False): return
-
-        print(f"Using {len(segments)} segments for formatting.")
-
-        srt_text = generate_srt_from_segments(segments)
-        default_transcript = generate_synced_transcript_from_segments(segments)
-        numbered_transcript = generate_numbered_transcript_from_segments(segments)
-        vtt_text = generate_vtt_from_segments(segments)
-        tsv_html = generate_tsv_from_segments(segments)
-        tsv_plain = generate_plain_tsv_from_segments(segments)
-        plain_srt_for_download = generate_plain_srt_from_deepgram(result)
-        plain_text_for_tokens = html_to_plain_text(default_transcript)
-        token_count = calculate_token_count(plain_text_for_tokens, "nova-3")
-        elapsed = time.time() - start_time # Calculate elapsed time
-
-        if job_id not in transcriptions: transcriptions[job_id] = {}
-        transcriptions[job_id]["nova-3"] = {
-            "srt_text": srt_text, "default_transcript": default_transcript, "numbered_transcript": numbered_transcript,
-            "vtt_text": vtt_text, "tsv_text": tsv_html, "tsv_plain": tsv_plain, "plain_srt": plain_srt_for_download,
-            "task": "transcribe", "language": detected_language, "token_count": token_count,
-            "summary_text": summary_text, "topics_data": topics_data, "elapsed_time": int(elapsed) # Store elapsed time
-        }
-
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 100, "message": "Transcription complete", "elapsed": 0, "remaining": 0 }, room=job_id)
-        print(f"Sending transcription_complete event for job {job_id}")
-        socketio.emit("transcription_complete", {
-            "job_id": job_id, "model_option": "nova-3", "task": "transcribe",
-            "language": detected_language,
-            "srt_text": srt_text, "default_transcript": default_transcript, "numbered_transcript": numbered_transcript,
-            "vtt_text": vtt_text, "tsv_text": tsv_html, "tsv_plain": tsv_plain, "plain_srt": plain_srt_for_download,
-            "token_count": token_count, "summary_text": summary_text, "topics_data": topics_data,
-            "elapsed_time": int(elapsed) # Send elapsed time
-        }, room=job_id)
-        print(f"Sent transcription_complete event for job {job_id}")
-
-    except Exception as e:
-        print(f"Error in Deepgram transcription: {str(e)}")
-        if not cancellations.get(job_id, False):
-            print(f"Sending transcription_failed event for job {job_id}")
-            socketio.emit("transcription_failed", { "job_id": job_id, "error": str(e) }, room=job_id)
-    finally:
-        if os.path.exists(filepath):
-            try: os.remove(filepath); print(f"Removed temporary file: {filepath}")
-            except: print(f"Failed to remove temporary file: {filepath}")
-        cancellations.pop(job_id, None)
-        print(f"Transcription job {job_id} completed")
-
-def gladia_transcription(job_id, filepath, api_key):
-    start_time = time.time() # Start timer
-    detected_language = "en" # Default to English as we force it
-    try:
-        if cancellations.get(job_id, False): return
-        print(f"Starting Gladia transcription (forced English) for job ID: {job_id}")
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 30, "message": f"Starting Gladia transcription", "elapsed": 0, "remaining": 0 }, room=job_id)
-
-        # Step 1: Upload
-        with open(filepath, "rb") as audio_file:
-            filename = os.path.basename(filepath)
-            upload_headers = { "x-gladia-key": api_key }
-            file_ext = os.path.splitext(filename)[1].lower()
-            mime_types = { ".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/m4a", ".mp4": "video/mp4", ".webm": "video/webm", ".ogg": "audio/ogg", ".flac": "audio/flac", ".aac": "audio/aac", ".opus": "audio/opus" }
-            mime_type = mime_types.get(file_ext, "audio/mpeg")
-            files = { "audio": (filename, audio_file, mime_type) }
-            socketio.emit("progress_update", { "job_id": job_id, "progress": 40, "message": "Uploading file to Gladia", "elapsed": 0, "remaining": 0 }, room=job_id)
-            print(f"Uploading file to Gladia: {filename} with type {mime_type}")
-            try:
-                upload_response = requests.post( "https://api.gladia.io/v2/upload", headers=upload_headers, files=files )
-                if upload_response.status_code != 200: raise Exception(f"Gladia API upload error: {upload_response.status_code}, {upload_response.text}")
-                upload_result = upload_response.json(); audio_url = upload_result.get("audio_url")
-                if not audio_url: raise Exception("Failed to get audio URL from Gladia upload response")
-                print(f"Successfully uploaded file to Gladia, received URL: {audio_url}")
-            except Exception as e: raise Exception(f"Error during file upload to Gladia: {str(e)}")
-
-        if cancellations.get(job_id, False): return
-
-        # Step 2: Request transcription - force language 'en'
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 50, "message": "Processing with Gladia API (English)", "elapsed": 0, "remaining": 0 }, room=job_id)
-        transcription_headers = { "x-gladia-key": api_key, "Content-Type": "application/json" }
-        transcription_data = {
-            "audio_url": audio_url, "language": "en", "detect_language": False, "translation": False,
-            "enable_code_switching": False, "diarization": True,
-            "diarization_config": { "number_of_speakers": 2, "min_speakers": 1, "max_speakers": 5, "enhanced": True },
-            "subtitles": True, "subtitles_config": { "formats": ["srt", "vtt"], "maximum_characters_per_row": 40, "maximum_rows_per_caption": 2 }
-        }
-        print(f"Gladia API request (transcription only, forced English):")
-        print(f"  - language: {transcription_data.get('language')}, detect_language: {transcription_data.get('detect_language')}")
-        try:
-            transcription_response = requests.post( "https://api.gladia.io/v2/pre-recorded", headers=transcription_headers, json=transcription_data )
-            if transcription_response.status_code not in [200, 201]: raise Exception(f"Gladia API transcription error: {transcription_response.status_code}, {transcription_response.text}")
-            transcription_result = transcription_response.json()
-            transcription_id = transcription_result.get("id"); result_url = transcription_result.get("result_url")
-            if not transcription_id or not result_url: raise Exception("Failed to get transcription ID or result URL from Gladia response")
-            print(f"Successfully submitted transcription request to Gladia, ID: {transcription_id}")
-        except Exception as e: raise Exception(f"Error during transcription request to Gladia: {str(e)}")
-
-        if cancellations.get(job_id, False): return
-
-        # Step 3: Poll for results
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 70, "message": "Waiting for transcription results", "elapsed": 0, "remaining": 0 }, room=job_id)
-        result = None; max_retries = 60; retry_count = 0
-        while retry_count < max_retries:
-            if cancellations.get(job_id, False): return
-            try:
-                result_response = requests.get( result_url, headers={"x-gladia-key": api_key} )
-                if result_response.status_code == 200:
-                    result = result_response.json(); status = result.get("status")
-                    if status == "done": print("Transcription completed successfully"); break
-                    elif status == "error": raise Exception(f"Gladia transcription error: {result.get('error', 'Unknown error')}")
-                    progress = min(90, 70 + int((retry_count / max_retries) * 20))
-                    socketio.emit("progress_update", { "job_id": job_id, "progress": progress, "message": "Processing transcription...", "elapsed": 0, "remaining": 0 }, room=job_id)
-                elif result_response.status_code == 404: print("Result not ready yet, waiting...")
-                else: print(f"Unexpected response from Gladia result URL: {result_response.status_code}")
-            except Exception as e: print(f"Error while polling for results: {str(e)}")
-            retry_count += 1; time.sleep(10)
-        if not result or result.get("status") != "done": raise Exception("Transcription timed out or failed")
-
-        # Step 4: Process the results
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 90, "message": "Processing transcript segments", "elapsed": 0, "remaining": 0 }, room=job_id)
-        transcript_data = result.get("result", {}); print("Gladia API result structure received.")
-        segments = []
-        detected_language = transcript_data.get("language", "en") # Get language if provided, default 'en'
-
-        # Extract segments (same logic as before)
-        if "transcription" in transcript_data and isinstance(transcript_data["transcription"], dict) and "utterances" in transcript_data["transcription"]:
-            utterances = transcript_data["transcription"]["utterances"]; print(f"Found {len(utterances)} utterances")
-            for u in utterances: segments.append({ "start": u.get("start", 0), "end": u.get("end", 0), "text": str(u.get("text", "")).strip() })
-        elif "transcription" in transcript_data and isinstance(transcript_data["transcription"], dict) and "full_transcript" in transcript_data["transcription"]:
-             full_text = transcript_data["transcription"]["full_transcript"]; print(f"Using full_transcript fallback...")
-             lines = full_text.strip().split('\n'); duration = transcript_data.get("metadata", {}).get("duration", 10)
-             time_per_line = duration / len(lines) if lines else 0; start_t = 0
-             for line in lines:
-                 if line.strip(): end_t = start_t + time_per_line; segments.append({ "start": start_t, "end": end_t, "text": line.strip() }); start_t = end_t
-        elif "subtitles" in transcript_data and transcript_data.get("subtitles", {}).get("srt"):
-            srt_content = transcript_data["subtitles"]["srt"]; print("Using SRT subtitle fallback.")
-            srt_blocks = re.split(r'\n\n+', srt_content.strip())
-            for block in srt_blocks:
-                lines = block.strip().split('\n')
-                if len(lines) >= 3:
-                    try:
-                        time_line = lines[1]; parts = time_line.split(' --> ')
-                        if len(parts) == 2: s_time = parse_srt_time(parts[0]); e_time = parse_srt_time(parts[1]); txt = ' '.join(lines[2:])
-                        segments.append({ "start": s_time, "end": e_time, "text": txt.strip() })
-                    except Exception as srt_err: print(f"Warning: Could not parse SRT block: {srt_err}")
-        if not segments:
-            print("WARNING: No segments extracted. Creating dummy segment."); segments.append({ "start": 0, "end": 1, "text": "Transcription completed, but no text segments extracted."})
-        print(f"Generated {len(segments)} segments.")
-
-        srt_text = generate_srt_from_segments(segments)
-        default_transcript = generate_synced_transcript_from_segments(segments)
-        numbered_transcript = generate_numbered_transcript_from_segments(segments)
-        vtt_text = generate_vtt_from_segments(segments)
-        tsv_html = generate_tsv_from_segments(segments)
-        tsv_plain = generate_plain_tsv_from_segments(segments)
-        plain_srt_for_download = transcript_data.get("subtitles", {}).get("srt", generate_plain_srt_from_segments(segments))
-        plain_text_for_tokens = html_to_plain_text(default_transcript)
-        token_count = calculate_token_count(plain_text_for_tokens)
-        elapsed = time.time() - start_time # Calculate elapsed time
-
-        if job_id not in transcriptions: transcriptions[job_id] = {}
-        transcriptions[job_id]["gladia"] = {
-            "srt_text": srt_text, "default_transcript": default_transcript, "numbered_transcript": numbered_transcript,
-            "vtt_text": vtt_text, "tsv_text": tsv_html, "tsv_plain": tsv_plain, "plain_srt": plain_srt_for_download,
-            "task": "transcribe", "language": detected_language, "token_count": token_count, "elapsed_time": int(elapsed) # Store elapsed
-        }
-
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 100, "message": "Transcription complete", "elapsed": 0, "remaining": 0 }, room=job_id)
-        socketio.emit("transcription_complete", {
-            "job_id": job_id, "model_option": "gladia", "task": "transcribe", "language": detected_language,
-            "srt_text": srt_text, "default_transcript": default_transcript, "numbered_transcript": numbered_transcript,
-            "vtt_text": vtt_text, "tsv_text": tsv_html, "tsv_plain": tsv_plain, "plain_srt": plain_srt_for_download,
-            "token_count": token_count, "elapsed_time": int(elapsed) # Send elapsed
-        }, room=job_id)
-
-    except Exception as e:
-        print(f"Error in Gladia transcription: {str(e)}")
-        if not cancellations.get(job_id, False): socketio.emit("transcription_failed", { "job_id": job_id, "error": str(e) }, room=job_id)
-    finally:
-        if os.path.exists(filepath):
-            try: os.remove(filepath); print(f"Removed temporary file: {filepath}")
-            except: print(f"Failed to remove temporary file: {filepath}")
-        cancellations.pop(job_id, None)
-        print(f"Transcription job {job_id} completed")
-
-
-def parse_srt_time(time_str):
-    # (Function remains the same)
-    try:
-        time_str_cleaned = time_str.replace(',', '.')
-        parts = time_str_cleaned.split(':')
-        if len(parts) == 3:
-            hours = int(parts[0]); minutes = int(parts[1]); seconds = float(parts[2])
-            return hours * 3600 + minutes * 60 + seconds
-        else: print(f"Warning: Could not parse SRT time format: {time_str}"); return 0
-    except ValueError: print(f"Warning: ValueError parsing SRT time: {time_str}"); return 0
-    except Exception as e: print(f"Warning: Unexpected error parsing SRT time '{time_str}': {e}"); return 0
-
-@socketio.on("cancel_transcription")
-def handle_cancel_transcription(data):
-    job_id = data.get("job_id")
-    if job_id:
-        print(f"Cancellation requested for job: {job_id}")
-        cancellations[job_id] = True
-        emit("transcription_cancelled", {"job_id": job_id}, room=job_id)
-
-@socketio.on("join")
-def on_join(data):
-    job_id = data.get("job_id")
-    if job_id:
-        join_room(job_id)
-        print(f"Socket client joined room: {job_id}")
-        # emit("joined", {"job_id": job_id}) # Optional: Confirm join
-
-@app.route('/download_srt', methods=['POST'])
-def download_srt():
-    # (This function remains the same)
-    output_type = request.form.get('output_type', 'srt')
+@app.route('/transcribe_elevenlabs', methods=['POST'])
+def transcribe_elevenlabs_route():
+    api_key = request.form.get('elevenlabs_api_key')
+    file = request.files.get('file')
     job_id = request.form.get('job_id')
-    model = request.form.get('model', '')
-    if output_type == "srt": ext = "srt"
-    elif output_type == "vtt": ext = "vtt"
-    elif output_type == "tsv": ext = "tsv"
-    else: ext = "txt"
-    output_text = ""
-    if 'srt_text' in request.form:
-        output_text = request.form.get('srt_text', '')
-    elif job_id and job_id in transcriptions:
-        model_results = None
-        for model_name, results in transcriptions[job_id].items():
-            if model and model == model_name: model_results = results; break
-            if not model: model_results = results; break
-        if model_results:
-            if output_type == "srt" and "plain_srt" in model_results: output_text = model_results["plain_srt"]; print("Using plain SRT format for download")
-            elif output_type == "srt": output_text = html_to_plain_srt(model_results.get("srt_text", ""))
-            elif output_type == "vtt": output_text = html_to_plain_vtt(model_results.get("vtt_text", ""))
-            elif output_type == "tsv" and "tsv_plain" in model_results: output_text = model_results["tsv_plain"]
-            else: output_text = html_to_plain_text(model_results.get("default_transcript", ""))
-    if not output_text: return jsonify({"error": "No transcript data found"}), 400
-    output_file = os.path.join(app.config['TEMP_FOLDER'], f"transcription.{ext}")
-    with open(output_file, "w", encoding="utf-8") as f: f.write(output_text)
-    return send_file(output_file, as_attachment=True, download_name=f"transcription.{ext}")
+    if not api_key or not file or not job_id:
+        return jsonify({"error": "ElevenLabs API key, file, and job_id are required."}), 400
 
-def html_to_plain_text(html_content):
-    # (Function remains the same)
-    if not html_content: return ""
-    import re
-    plain_text = re.sub(r'<[^>]*>', ' ', html_content)
-    plain_text = re.sub(r'\s+', ' ', plain_text).strip()
-    return plain_text
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['TEMP_FOLDER'], filename)
+    file.save(filepath)
 
-def html_to_plain_srt(srt_html):
-    # (Function remains the same)
-    if not srt_html: return ""
-    import re; output = ""
-    segments = re.findall(r'<div class="transcript-segment"[^>]*>.*?<div class="srt-index[^>]*>(\d+)</div>.*?<div class="srt-timing[^>]*>([^<]*)</div>.*?<div class="srt-text[^>]*>(.*?)</div>.*?</div>', srt_html, re.DOTALL)
-    for index, timing, text in segments:
-        clean_text = re.sub(r'<[^>]*>', '', text).strip(); clean_timing = timing.strip()
-        output += f"{index}\n{clean_timing}\n{clean_text}\n\n"
-    return output.strip()
+    cancellations[job_id] = False
+    socketio.start_background_task(elevenlabs_transcription, job_id, filepath, api_key)
+    return jsonify({"job_id": job_id, "status": "started", "model_option": "scribe-v1"})
 
-def html_to_plain_vtt(vtt_html):
-    # (Function remains the same)
-    if not vtt_html: return ""
-    import re; output = ""
-    header_match = re.search(r'<div class="vtt-header">(.*?)</div>', vtt_html, re.IGNORECASE)
-    output += (header_match.group(1).strip() + "\n\n") if header_match else "WEBVTT\n\n"
-    segments = re.findall(r'<div class="transcript-segment vtt-entry"[^>]*>.*?<div class="vtt-timing[^>]*>([^<]*)</div>.*?<div class="vtt-text[^>]*>(.*?)</div>.*?</div>', vtt_html, re.DOTALL)
-    for timing, text in segments:
-        clean_text = re.sub(r'<[^>]*>', '', text).strip(); clean_timing = timing.strip()
-        output += f"{clean_timing}\n{clean_text}\n\n"
-    return output.strip()
-
-# ------------------------------
-# Local Transcription Route
-# ------------------------------
 @app.route('/transcribe_local', methods=['POST'])
 def transcribe_local():
     file = request.files.get('file')
-    model_option = request.form.get('model_option', 'tiny') # Extract model_option
+    model_option = request.form.get('model_option', 'tiny')
     job_id = request.form.get('job_id')
-
-    print(f"Received local request: model={model_option}, job={job_id}")
-
     if not file or not job_id or not model_option:
         return jsonify({"error": "File, job_id, and model_option are required."}), 400
 
@@ -789,114 +1253,102 @@ def transcribe_local():
     socketio.start_background_task(fast_transcription, job_id, filepath, model_option)
     return jsonify({"job_id": job_id, "status": "started", "model_option": model_option})
 
-def fast_transcription(job_id, file_path, model_option):
-    start_time = time.time()
-    detected_language = "auto-detected" # Initialize
+######################################################
+# SocketIO: Cancel + Join
+######################################################
+@socketio.on("cancel_transcription")
+def handle_cancel_transcription(data):
+    job_id = data.get("job_id")
+    if job_id:
+        print(f"Cancellation requested for job: {job_id}")
+        cancellations[job_id] = True
+        # First emit that we're cancelling
+        emit("transcription_cancelling", {
+            "job_id": job_id,
+            "message": "Cancellation request received..."
+        }, room=job_id)
+        # Then immediately emit the cancelled event
+        emit("transcription_cancelled", {
+            "job_id": job_id,
+            "message": "Transcription cancelled by user"
+        }, room=job_id)
+
+@socketio.on("join")
+def on_join(data):
+    job_id = data.get("job_id")
+    sid = request.sid
+    if job_id:
+        join_room(job_id)
+        print(f"Socket client {sid} joined room: {job_id}")
+
+######################################################
+# Download endpoint
+######################################################
+@app.route('/download_srt', methods=['POST'])
+def download_srt():
+    output_type = request.form.get('output_type', 'srt').lower()
+    job_id = request.form.get('job_id')
+    model = request.form.get('model', '')
+    print(f"Download requested: job={job_id}, model={model}, type={output_type}")
+
+    if not job_id or job_id not in transcriptions:
+        return jsonify({"error": "Job ID not found or no transcriptions for this ID."}), 400
+
+    model_results = None
+    if model and model in transcriptions[job_id]:
+        model_results = transcriptions[job_id][model]
+    else:
+        # If only one model is present, pick it automatically
+        available_models = list(transcriptions[job_id].keys())
+        if len(available_models) == 1:
+            model = available_models[0]
+            model_results = transcriptions[job_id][model]
+        else:
+            return jsonify({"error": f"Multiple models found for {job_id} ({', '.join(available_models)}). Specify one."}), 400
+
+    output_text = ""
+    ext = "txt"
+
     try:
-        if cancellations.get(job_id, False): return
-        print(f"Loading local model: {model_option} for transcription")
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 10, "message": f"Loading {model_option} model", "elapsed": 0, "remaining": 0 }, room=job_id)
-        try:
-            model = whisper.load_model(model_option) # Use the passed model_option
-            print(f"Model loaded: {model_option}")
-        except ValueError as e:
-            print(f"Error loading model {model_option}: {str(e)}")
-            if "is not a valid model name" in str(e): socketio.emit("transcription_failed", { "job_id": job_id, "error": f"Invalid model name: {model_option}. Ensure it's installed." }, room=job_id)
-            else: socketio.emit("transcription_failed", { "job_id": job_id, "error": str(e) }, room=job_id)
-            return # Stop execution if model loading fails
+        if output_type == "srt":
+            ext = "srt"
+            if "plain_srt" in model_results and model_results["plain_srt"]:
+                 output_text = model_results["plain_srt"]
+            else:
+                # Convert from HTML
+                 output_text = html_to_plain_srt(model_results.get("srt_text", ""))
+        elif output_type == "vtt":
+            ext = "vtt"
+            output_text = html_to_plain_vtt(model_results.get("vtt_text", ""))
+        elif output_type == "tsv":
+            ext = "tsv"
+            if "tsv_plain" in model_results and model_results["tsv_plain"]:
+                 output_text = model_results["tsv_plain"]
+            else:
+                # fallback
+                output_text = html_to_plain_text(model_results.get("default_transcript", ""))
+                ext = "txt"
+        else: # Correctly aligned with the elif blocks
+            # default to plain txt
+            ext = "txt"
+            output_text = html_to_plain_text(model_results.get("default_transcript", ""))
 
-        if cancellations.get(job_id, False): return
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 30, "message": f"Transcribing audio", "elapsed": int(time.time() - start_time), "remaining": 0 }, room=job_id)
-        options = { "task": "transcribe", "language": None, "fp16": torch.cuda.is_available(), "temperature": 0, "best_of": 5, "beam_size": 5, "patience": 1.0, "suppress_tokens": "-1", "word_timestamps": True, "condition_on_previous_text": True, "initial_prompt": None, }
-        if model_option == "turbo": socketio.emit("progress_update", { "job_id": job_id, "progress": 35, "message": "Using Turbo model", "elapsed": int(time.time() - start_time), "remaining": 0 }, room=job_id)
+        if not output_text:
+            print("Warning: output text is empty, returning empty file.")
 
-        if cancellations.get(job_id, False): return
-        result = model.transcribe(file_path, **options)
-        if cancellations.get(job_id, False): return
+        download_filename = f"{model}_{job_id}.{ext}"
+        output_file = os.path.join(app.config['TEMP_FOLDER'], f"download_{job_id}_{model}.{ext}")
+        with open(output_file, "w", encoding="utf-8") as f:
+             f.write(output_text)
 
-        socketio.emit("progress_update", { "job_id": job_id, "progress": 70, "message": "Processing transcript", "elapsed": int(time.time() - start_time), "remaining": 0 }, room=job_id)
-        segments = result.get("segments", [])
-        detected_language = result.get("language", "auto-detected")
-
-        # Segment improvement logic... (same as before)
-        improved_segments = []
-        for i, seg in enumerate(segments):
-             text = seg["text"].strip()
-             if text:
-                 is_first = (i == 0)
-                 prev_ends_sentence = not is_first and improved_segments[-1]["text"].strip().endswith(('.', '!', '?'))
-                 if (is_first or prev_ends_sentence) and text[0].isalpha() and not text[0].isupper():
-                      text = text[0].upper() + text[1:]
-
-                 is_last = (i == len(segments) - 1)
-                 next_starts_upper = False
-                 if not is_last:
-                     next_seg_text = segments[i+1]["text"].strip()
-                     if next_seg_text and next_seg_text[0].isupper(): next_starts_upper = True
-
-                 if not text.endswith(('.', '!', '?', ',', ':', ';', '"', "'")) and (is_last or next_starts_upper):
-                      text += '.'
-             improved_segments.append({"start": seg["start"], "end": seg["end"], "text": text})
-
-        if cancellations.get(job_id, False): return
-
-        srt_text = generate_srt_from_segments(improved_segments)
-        default_transcript = generate_synced_transcript_from_segments(improved_segments)
-        numbered_transcript = generate_numbered_transcript_from_segments(improved_segments)
-        vtt_text = generate_vtt_from_segments(improved_segments)
-        tsv_html = generate_tsv_from_segments(improved_segments)
-        tsv_plain = generate_plain_tsv_from_segments(improved_segments)
-        plain_srt_for_download = generate_plain_srt_from_segments(improved_segments)
-        plain_text_for_tokens = html_to_plain_text(default_transcript)
-        token_count = calculate_token_count(plain_text_for_tokens)
-        elapsed = time.time() - start_time # Calculate elapsed time
-
+        return send_file(output_file, as_attachment=True, download_name=download_filename)
     except Exception as e:
-        if not cancellations.get(job_id, False):
-            print(f"Error in local transcription: {str(e)}")
-            socketio.emit("transcription_failed", {"job_id": job_id, "error": str(e)}, room=job_id)
-        # Reset variables on error
-        srt_text, default_transcript, numbered_transcript, vtt_text, tsv_html, tsv_plain, plain_srt_for_download = [""] * 7
-        token_count = 0; detected_language = "Error"; elapsed = 0
-        try:
-            if 'model' in locals() and hasattr(model, 'cpu'): model.cpu() # Try to move model to CPU
-            torch.cuda.empty_cache()
-            if os.path.exists(file_path): os.remove(file_path)
-            cancellations.pop(job_id, None)
-        except Exception as cleanup_err: print(f"Cleanup error: {cleanup_err}")
-        return # Important to return after handling error
+        print(f"Error generating file for download: {e}")
+        return jsonify({"error": f"Failed to generate file: {str(e)}"}), 500
 
-    if cancellations.get(job_id, False):
-        try:
-            if 'model' in locals() and hasattr(model, 'cpu'): model.cpu()
-            torch.cuda.empty_cache()
-            if os.path.exists(file_path): os.remove(file_path)
-            cancellations.pop(job_id, None)
-        except Exception as cleanup_err: print(f"Cancellation cleanup error: {cleanup_err}")
-        return
-
-    if job_id not in transcriptions: transcriptions[job_id] = {}
-    transcriptions[job_id][model_option] = {
-        "srt_text": srt_text, "default_transcript": default_transcript, "numbered_transcript": numbered_transcript,
-        "vtt_text": vtt_text, "tsv_text": tsv_html, "tsv_plain": tsv_plain, "plain_srt": plain_srt_for_download,
-        "task": "transcribe", "language": detected_language, "token_count": token_count, "elapsed_time": int(elapsed) # Store elapsed
-    }
-    socketio.emit("progress_update", { "job_id": job_id, "progress": 100, "message": "Transcription complete", "elapsed": int(elapsed), "remaining": 0 }, room=job_id) # Also send final elapsed here for UI update
-    socketio.emit("transcription_complete", {
-        "job_id": job_id, "model_option": model_option, "task": "transcribe", "language": detected_language,
-        "srt_text": srt_text, "default_transcript": default_transcript, "numbered_transcript": numbered_transcript,
-        "vtt_text": vtt_text, "tsv_text": tsv_html, "tsv_plain": tsv_plain, "plain_srt": plain_srt_for_download,
-        "token_count": token_count, "elapsed_time": int(elapsed) # Send elapsed
-    }, room=job_id)
-
-    # Final cleanup
-    try:
-        if 'model' in locals() and hasattr(model, 'cpu'): model.cpu(); del model
-        torch.cuda.empty_cache()
-        if os.path.exists(file_path): os.remove(file_path)
-        cancellations.pop(job_id, None)
-    except Exception as final_cleanup_err: print(f"Final cleanup error: {final_cleanup_err}")
-
-
+######################################################
+# MAIN
+######################################################
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    print("Starting Flask-SocketIO server...")
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)

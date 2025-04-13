@@ -10,7 +10,7 @@
   <style>
     :root {
 
-      /* 
+      /*
       To-Do List:
       - Implement offline model (requires wavesurfer.js and check requirements for local Whisper models to work)
       - Integrate LLM translation (with user's ChatGPT, Claude API)
@@ -18,7 +18,7 @@
       - Ensure ARIA compliance
       */
 
-        
+
       /* E Ink theme colors */
       --primary-color: #333333;
       --primary-dark: #1a1a1a;
@@ -117,17 +117,17 @@
     a { color: var(--primary-dark); text-decoration: none; transition: var(--transition); }
     a:hover { color: var(--primary-color); }
     .app-container { display: grid; grid-template-columns: var(--sidebar-width) 1fr; grid-template-rows: var(--header-height) 1fr; grid-template-areas: "header header" "sidebar main"; min-height: 100vh; }
-    .header { grid-area: header; display: flex; align-items: center; justify-content: center; padding: 0 1.5rem; background-color: var(--secondary-bg); border-bottom: 1px solid var(--border-color); position: relative; overflow: hidden; z-index: 10; }
-    .logo { display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); font-family: 'Merriweather', serif; }
+    .header { grid-area: header; display: flex; align-items: center; padding: 0 1.5rem; background-color: var(--secondary-bg); border-bottom: 1px solid var(--border-color); position: relative; overflow: hidden; z-index: 10; }
+    .logo { display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); font-family: 'Merriweather', serif; margin: 0 auto; }
     .logo i { color: var(--primary-color); font-size: 2rem; }
     .logo h1 { margin: 0; font-size: 1.5rem; font-weight: 700; }
     .logo a { display: flex; align-items: center; gap: 0.5rem; text-decoration: none; color: inherit; cursor: pointer; }
-    .logo .highlight-text { 
-      transition: color 0.3s ease-in-out; 
+    .logo .highlight-text {
+      transition: color 0.3s ease-in-out;
       color: inherit;
     }
-    .logo a:hover .highlight-text { 
-      color: var(--primary-color); 
+    .logo a:hover .highlight-text {
+      color: var(--primary-color);
       animation: fadeInOut 1.5s ease-in-out;
     }
 
@@ -136,6 +136,41 @@
       50% { opacity: 1; }
       100% { opacity: 0.7; }
     }
+    
+    .header-buttons {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    
+    .btn-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background-color: var(--tertiary-bg);
+      color: var(--text-primary);
+      border: none;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    
+    .btn-icon:hover {
+      background-color: var(--highlight-bg);
+      color: var(--primary-color);
+    }
+    
+    .btn-icon i {
+      font-size: 1.25rem;
+    }
+    
+    /* Class for hidden sidebar */
+    .sidebar-hidden {
+      display: none;
+    }
+    
     .header-actions { display: flex; align-items: center; gap: 1rem; position: absolute; right: 1.5rem; }
     .header-actions button { font-size: 1rem; }
     .sidebar { grid-area: sidebar; background-color: var(--secondary-bg); border-right: 1px solid var(--border-color); padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; height: calc(100vh - var(--header-height)); }
@@ -215,7 +250,9 @@
     .options-title { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
     .options-title i { color: var(--primary-color); }
     .options-title h3, .options-title h4 { margin: 0; font-size: 0.9rem; font-weight: 500; }
-    .model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; grid-auto-rows: 1fr; }
+    /* Increase columns for cloud models */
+    .local-model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; grid-auto-rows: 1fr; }
+    .cloud-model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; grid-auto-rows: 1fr; } /* Now uses 3 columns */
     .model-option { position: relative; }
     .model-option input { position: absolute; opacity: 0; width: 0; height: 0; }
     .model-option label { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 1rem 0.5rem; background-color: var(--primary-bg); border: 1px solid var(--border-color); border-radius: var(--radius); cursor: pointer; transition: var(--transition); height: 100%; }
@@ -287,19 +324,19 @@
     .transcript-segment.highlighted { background-color: var(--tertiary-bg); border-left: 3px solid var(--primary-color); }
     .segment-time { font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.25rem; }
     .segment-text { line-height: 1.5; }
-    .loading-overlay { 
-        position: absolute; 
-        top: 0; 
-        left: 0; 
-        width: 100%; 
-        height: 100%; 
-        background-color: var(--primary-bg); 
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: var(--primary-bg);
         opacity: 0.94;
-        display: flex; 
-        flex-direction: column; 
-        align-items: center; 
-        justify-content: center; 
-        z-index: 5; 
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 5;
     }
     .loading-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; z-index: 10; }
     .loading-text { color: var(--text-primary); font-weight: 500; font-size: 1.2rem; text-align: center; }
@@ -310,18 +347,18 @@
     .loading-bars span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes dots { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
     .typewriter-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
-    .typewriter-letter { 
-        position: absolute; 
-        font-family: monospace; 
-        color: var(--primary-color); 
-        opacity: 0; 
-        animation: randomFadeBg 3.5s ease-in-out forwards; 
-        font-size: 20px; 
+    .typewriter-letter {
+        position: absolute;
+        font-family: monospace;
+        color: var(--primary-color);
+        opacity: 0;
+        animation: randomFadeBg 3.5s ease-in-out forwards;
+        font-size: 20px;
     }
-    @keyframes randomFadeBg { 
-        0% { opacity: 0; transform: scale(0.8); } 
-        40% { opacity: 0.5; transform: scale(1); } 
-        100% { opacity: 0; transform: scale(1.2); } 
+    @keyframes randomFadeBg {
+        0% { opacity: 0; transform: scale(0.8); }
+        40% { opacity: 0.5; transform: scale(1); }
+        100% { opacity: 0; transform: scale(1.2); }
     }
 
     /* Buttons & Forms */
@@ -372,6 +409,11 @@
     .transcribe-button-container { text-align: center; margin-top: 2rem; padding: 1rem; background-color: var(--primary-bg); border: 1px solid var(--border-color); border-radius: var(--radius); box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); order: 100; }
 
     /* Media Queries */
+    @media (min-width: 2200px) {
+      .local-model-grid { grid-template-columns: repeat(6, 1fr); }
+      .cloud-model-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+
     @media (max-width: 1600px) {
       .input-panel-content { flex-direction: column; }
       .settings-column { height: auto; overflow: visible; flex-direction: column; }
@@ -382,30 +424,25 @@
     @media (max-width: 1200px) {
       .app-container { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
       .sidebar { display: none; }
+      .header-buttons { display: none; }
       .sidebar-toggle { display: block; }
       .input-panel-content { flex-direction: column; }
       .settings-column { height: auto; overflow: visible; flex-direction: column; }
+      .local-model-grid { grid-template-columns: repeat(6, 1fr); }
+      .cloud-model-grid { grid-template-columns: repeat(4, 1fr); }
     }
     @media (max-width: 992px) {
-      .main-container { flex-direction: column; height: auto; overflow-y: auto; /* Allow sction scroll */ }
+      .main-container { flex-direction: column; height: auto; overflow-y: auto; }
       .input-panel { height: auto; border-right: none; border-bottom: 1px solid var(--border-color); overflow-y: visible;  }
       .output-panel { height: auto; overflow-y: visible; }
-      .settings-panel { overflow-y: visible; flex: initial; } /* Reset for mobile */
-      .transcript-panel { height: 400px; overflow-y: auto; } /* Allow transcript scroll */
-      .progress-container { margin-top: 0.75rem; } /* Adjust spacing on mobile */
+      .settings-panel { overflow-y: visible; flex: initial; }
+      .transcript-panel { height: 400px; overflow-y: auto; }
+      .local-model-grid { grid-template-columns: repeat(4, 1fr); }
+      .cloud-model-grid { grid-template-columns: repeat(4, 1fr); }
     }
-    @media (min-width: 993px) {
-        .settings-column {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }
-        .settings-panel {
-            flex: 1;
-            overflow-y: auto; /* Allow section scroll */
-            padding-bottom: 1rem; /* Space before sticky button */
-        }
-        .transcribe-button-container {
+
+    /* Making sure Transcribe Button Container is sticky on desktop */
+    @media (min-width: 993px) { .transcribe-button-container {
             flex-shrink: 0;
             position: sticky;
             bottom: 0;
@@ -415,11 +452,12 @@
             z-index: 5;
         }
     }
-    @media (max-width: 768px) {
-      .model-grid { grid-template-columns: repeat(2, 1fr); }
-    }
-    @media (max-width: 576px) {
-      .model-grid { grid-template-columns: repeat(2, 1fr); }
+
+    /* Only show the sidebar toggle button on larger screens */
+    @media (min-width: 1201px) {
+      .header-buttons {
+        display: flex;
+      }
     }
 
     /* Toggle switch styles */
@@ -444,7 +482,22 @@
     .total-cost-row { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color); font-weight: 600; }
 
     /* Topics */
-    .topic-tag { display: inline-block; background-color: var(--tertiary-bg); color: var(--text-primary); padding: 0.3rem 0.7rem; border-radius: 1rem; margin-right: 0.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 500; border: 1px solid var(--border-color); }
+    .topic-tag { 
+        display: inline-block; 
+        background-color: var(--tertiary-bg); 
+        color: var(--text-primary); 
+        padding: 0.5rem 1rem; 
+        border-radius: 1rem; 
+        margin: 0 0.5rem 0.5rem; 
+        font-size: 1rem; 
+        font-weight: 500; 
+        border: 1px solid var(--border-color);
+        transition: transform 0.2s;
+    }
+    .topic-tag:hover { /* Playful hover effect */
+        transform: scale(1.05) rotate(2deg);
+        cursor: default;
+    }
 
     /* Unified Button/Tab Style */
     .button-tabs {
@@ -454,26 +507,26 @@
       margin-top: 0.5rem;
     }
     .button-tab {
-      background: none; 
-      border: 1px solid transparent; 
+      background: none;
+      border: 1px solid transparent;
       color: var(--text-secondary);
-      font-size: 0.9rem; 
-      font-weight: 500; 
-      padding: 0.3rem 0.6rem; 
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.3rem 0.6rem;
       border-radius: var(--radius);
-      cursor: pointer; 
+      cursor: pointer;
       transition: var(--transition);
       text-align: center;
     }
-    .button-tab:hover { 
-      color: var(--text-primary); 
-      background-color: var(--tertiary-bg); 
+    .button-tab:hover {
+      color: var(--text-primary);
+      background-color: var(--tertiary-bg);
     }
-    .button-tab.active { 
-      color: var(--primary-dark); 
-      background-color: var(--tertiary-bg); 
-      font-weight: 600; 
-      border-color: var(--primary-color); 
+    .button-tab.active {
+      color: var(--primary-dark);
+      background-color: var(--tertiary-bg);
+      font-weight: 600;
+      border-color: var(--primary-color);
     }
 
     /* Home option styles */
@@ -481,16 +534,16 @@
 
     .typewriter-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
     #headerTypewriterContainer { pointer-events: none; opacity: 0; transition: opacity 0.3s ease-in-out; z-index: 1; }
-    #headerTypewriterContainer .typewriter-letter { 
+    #headerTypewriterContainer .typewriter-letter {
       color: var(--primary-color);
-      opacity: 0; 
-      animation: matrixFade 2.5s ease-in-out forwards; 
+      opacity: 0;
+      animation: matrixFade 2.5s ease-in-out forwards;
     }
-    @keyframes matrixFade { 
-      0% { opacity: 0; transform: scale(0.8); } 
-      40% { opacity: 0.7; transform: scale(1); } 
+    @keyframes matrixFade {
+      0% { opacity: 0; transform: scale(0.8); }
+      40% { opacity: 0.7; transform: scale(1); }
       70% {    transform: scale(1.1); }
-      100% { opacity: 0; transform: scale(1.2); } 
+      100% { opacity: 0; transform: scale(1.2); }
     }
 
     /* Styling for the active model section in the Model Info panel */
@@ -502,18 +555,29 @@
       margin-bottom: 0.75rem;
     }
 
+    /* SRT/VTT Specific Styles */
+    .srt-index, .srt-timing, .vtt-timing { font-size: 0.8em; color: var(--text-tertiary); margin-bottom: 0.25em; }
+    .vtt-header { font-weight: bold; margin-bottom: 0.5em; }
+    .tsv-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+    .tsv-table th, .tsv-table td { border: 1px solid var(--border-color); padding: 0.4em 0.6em; text-align: left; }
+    .tsv-table th { background-color: var(--tertiary-bg); font-weight: 600; }
+
   </style>
 </head>
 <body>
   <div class="app-container">
     <header class="header">
+      <div class="header-buttons">
+        <button id="sidebarToggleBtn" class="btn btn-icon" title="Toggle Sidebar">
+          <i class="ri-layout-left-line"></i>
+        </button>
+      </div>
       <div class="logo">
         <a href="javascript:void(0)" onclick="window.location.reload()">
           <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path fill="var(--primary-color)" d="M4.998 15v4h4v2h-6v-6zm16 0v6h-6v-2h4v-4zm-8-9v12h-2V6zm-4 3v6h-2V9zm8 0v6h-2V9zm-8-6v2h-4v4h-2V3zm12 0v6h-2V5h-4V3z"/></svg>
           <h1>Kaira <span class="highlight-text">Transcribe</span> Panel</h1>
         </a>
       </div>
-      <div class="typewriter-container" id="headerTypewriterContainer"></div>
     </header>
 
     <aside class="sidebar">
@@ -524,7 +588,7 @@
         </div>
       </div>
 
-      <!-- Sodebar Model Info Content -->
+      <!-- Sidebar Model Info Content -->
       <div id="modelInfoContent" style="display: none;">
         <div class="sidebar-section">
           <h2>Local Models (Whisper)</h2>
@@ -539,34 +603,30 @@
           <ul>
             <li>Fastest, but least accurate.</li>
             <li>VRAM req. ~1 GB</li>
-            <li>Parameters: 39 M</li>
           </ul>
         </div>
-        
+
         <div class="sidebar-section">
           <h3 data-model="base"><i class="ri-scales-line"></i> Base</h3>
           <ul>
             <li>Enhanced accuracy over Tiny.</li>
             <li>VRAM req. ~1 GB</li>
-            <li>Parameters: 74 M</li>
           </ul>
         </div>
-        
+
         <div class="sidebar-section">
           <h3 data-model="small"><i class="ri-speed-up-line"></i> Small</h3>
           <ul>
             <li>Balanced speed and performance.</li>
             <li>VRAM req. ~2 GB</li>
-            <li>Parameters: 244 M</li>
           </ul>
         </div>
-        
+
         <div class="sidebar-section">
           <h3 data-model="medium"><i class="ri-focus-3-line"></i> Medium</h3>
           <ul>
             <li>Improved nuance and accent handling.</li>
             <li>VRAM req. ~4 GB</li>
-            <li>Parameters: 769 M</li>
           </ul>
         </div>
 
@@ -575,39 +635,56 @@
           <ul>
             <li>Second best quality.</li>
             <li>VRAM req. ~6 GB</li>
-            <li>Parameters: 809 M</li>
           </ul>
         </div>
-        
+
         <div class="sidebar-section">
           <h3 data-model="large"><i class="ri-cpu-line"></i> Large</h3>
           <ul>
             <li>Best quality, but very slow. A regular computer may struggle to run this.</li>
             <li>VRAM req. ~10 GB</li>
-            <li>Parameters: 1550 M</li>
           </ul>
         </div>
 
         <div class="sidebar-section" style="margin-top: 1em;">
           <h2>Cloud Models</h2>
         </div>
-        
+
         <div class="sidebar-section">
           <h3 data-model="whisper-1"><i class="ri-openai-fill"></i> Whisper-1<i class="ri-external-link-line" style="float: right; opacity: 0.7; cursor: pointer;" title="Whisper Cloud Documentation" onclick="window.open('https://platform.openai.com/docs/guides/speech-to-text', '_blank');"></i></h3>
-          <p>OpenAI's cloud-based Whisper transcription model that provides high-quality transcription through their API.</p>
+          <p>OpenAI's original cloud transcription model, still good and cheap. Supports native timestamps.</p>
           <p style="margin-top: 0.5em;">Offers $5 free (API) credits (~14 hours of transcription).</p>
         </div>
-        
+
+        <div class="sidebar-section">
+          <h3 data-model="gpt-4o-mini-transcribe"><i class="ri-openai-fill"></i> 4o Mini<i class="ri-external-link-line" style="float: right; opacity: 0.7; cursor: pointer;" title="OpenAI Audio Models Documentation" onclick="window.open('https://platform.openai.com/docs/guides/speech-to-text', '_blank');"></i></h3>
+          <p>Uses GPT-4o mini to transcribe audio. Half the price of 4o. Supports prompting. Does not support native timestamps.</p>
+          <p style="margin-top: 0.5em;">Half the price of 4o.</p>
+         </div>
+
+        <div class="sidebar-section">
+            <h3 data-model="gpt-4o-transcribe"><i class="ri-openai-fill"></i> 4o<i class="ri-external-link-line" style="float: right; opacity: 0.7; cursor: pointer;" title="OpenAI Audio Models Documentation" onclick="window.open('https://platform.openai.com/docs/guides/speech-to-text', '_blank');"></i></h3>
+            <p>Uses GPT-4o to transcribe audio. Most expensive model. Supports prompting. Does not support native timestamps.</p>
+             <p style="margin-top: 0.5em;">Most expensive model.</p>
+        </div>
+
         <div class="sidebar-section">
           <h3 data-model="nova-3"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M11.203 24H1.517a.364.364 0 0 1-.258-.62l6.239-6.275a.37.37 0 0 1 .259-.108h3.52c2.723 0 5.025-2.127 5.107-4.845a5.004 5.004 0 0 0-4.999-5.148H7.613v4.646c0 .2-.164.364-.365.364H.968a.365.365 0 0 1-.363-.364V.364C.605.164.768 0 .969 0h10.416c6.684 0 12.111 5.485 12.01 12.187C23.293 18.77 17.794 24 11.202 24z"/></svg> Nova-3<i class="ri-external-link-line" style="float: right; opacity: 0.7; cursor: pointer;" title="Nova-3 Documentation" onclick="window.open('https://developers.deepgram.com/docs/models-languages-overview', '_blank');"></i></h3>
-          <p>Deepgram's cloud-based transcription model with multi-language support. Offers advanced AI features like summarization and topic detection for English content.</p>
+          <p>Deepgram's cloud model with multi-language support. Offers advanced AI features like summarization and topic detection for English content.</p>
           <p style="margin-top: 0.5em;">Offers $200 free (API) credits (~640 hours of transcription).</p>
         </div>
-        
+
         <div class="sidebar-section">
           <h3 data-model="gladia"><i class="ri-voiceprint-fill"></i> Gladia<i class="ri-external-link-line" style="float: right; opacity: 0.7; cursor: pointer;" title="Gladia Documentation" onclick="window.open('https://docs.gladia.io/chapters/introduction/introduction', '_blank');"></i></h3>
-          <p>Gladia's cloud-based transcription service optimized for English content. Provides accurate transcription through their API service. Requires a Gladia API key.</p>
+          <p>Gladia is optimized for English. </p>
           <p style="margin-top: 0.5em;">Offers 10 hours of free (API) credits per month.</p>
+        </div>
+
+        <div class="sidebar-section">
+            <h3 data-model="scribe-v1"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 300 400"><path fill="currentColor" d="M60 55H120V345H60Z M190 55H250V345H190Z"/></svg> Scribe-v1<i class="ri-external-link-line" style="float: right; opacity: 0.7; cursor: pointer;" title="Scribe v1 Documentation" onclick="window.open('https://elevenlabs.io/docs/models#scribe-v1', '_blank');"></i></h3>
+            <p>ElevenLabs' speech-to-text model supporting 99 languages.</p>
+            <p style="margin-top: 0.5em;">Offers 10,000 free (API) credits per month (~4,87 hours of transcription).</p>
+            <p style="margin-top: 0.5em; font-style: italic;">Free tier <a href="https://elevenlabs.io/pricing#pricing-table" target="_blank" style="color: var(--primary-color);">requires attribution</a> and does not have commercial licensing.</p>
         </div>
       </div>
 
@@ -648,7 +725,7 @@
             <div class="stat-item"><div class="stat-label">Paragraphs</div><div class="stat-value">0</div></div>
             <div class="stat-item"><div class="stat-label">Elapsed Time</div><div class="stat-value" id="elapsedTimeValue">0s</div></div>
           </div>
-          <div id="statsLoading" class="stats-loading" style="display: none;"><span>Calculating</span><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><defs><filter id="svgSpinnersGooeyBalls20"><feGaussianBlur in="SourceGraphic" result="y" stdDeviation="1"/><feColorMatrix in="y" result="z" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 18 -7"/><feBlend in="SourceGraphic" in2="z"/></filter></defs><g filter="url(#svgSpinnersGooeyBalls20)"><circle cx="5" cy="12" r="4" fill="currentColor"><animate attributeName="cx" calcMode="spline" dur="2s" keySplines=".36,.62,.43,.99;.79,0,.58,.57" repeatCount="indefinite" values="5;8;5"/></circle><circle cx="19" cy="12" r="4" fill="currentColor"><animate attributeName="cx" calcMode="spline" dur="2s" keySplines=".36,.62,.43,.99;.79,0,.58,.57" repeatCount="indefinite" values="19;16;19"/></circle><animateTransform attributeName="transform" dur="0.75s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12;360 12 12"/></g></svg></div>
+          <div id="statsLoading" class="stats-loading" style="display: none;"><span>Calculating</span><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><defs><filter id="svgSpinnersGooeyBalls20"><feGaussianBlur in="SourceGraphic" result="y" stdDeviation="1"/><feColorMatrix in="y" result="z" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 18 -7"/><feBlend in="SourceGraphic" in2="z"/></filter></defs><g filter="url(#svgSpinnersGooeyBalls20)"><circle cx="5" cy="12" r="4" fill="currentColor"><animate attributeName="cx" calcMode="spline" dur="2s" keySplines=".36,.62,.43,.99;.79,0,.58,.57" repeatCount="indefinite" values="5;8;5"/></circle><circle cx="19" cy="12" r="4" fill="currentColor"><animate attributeName="cx" calcMode="spline" dur="2s" keySplines=".36,.62,.43,.99;.79,0,.58,.57" repeatCount="indefinite" values="19;16;19"/></circle><animateTransform attributeName="transform" dur="0.75s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></g></svg></div>
         </div>
 
         <div class="sidebar-section github-section">
@@ -691,38 +768,66 @@
               <div class="settings-panel"> <!-- This panel scrolls -->
                 <div class="settings-title"><i class="ri-settings-3-line"></i><h2>Model Settings</h2></div>
                 <div class="model-options">
-                  <div class="options-title"><i class="ri-computer-line"></i><h3>Local Models (Whisper)</h3></div>
-                  <div class="model-grid">
-                    <div class="model-option"><input type="radio" name="model_option" id="tiny" value="tiny" checked><label for="tiny"><i class="ri-speed-mini-line model-icon"></i><div class="model-name">Tiny</div><div class="model-desc">Fast, low memory</div></label></div>
-                    <div class="model-option"><input type="radio" name="model_option" id="base" value="base"><label for="base"><i class="ri-scales-line model-icon"></i><div class="model-name">Base</div><div class="model-desc">Balanced</div></label></div>
-                    <div class="model-option"><input type="radio" name="model_option" id="small" value="small"><label for="small"><i class="ri-speed-up-line model-icon"></i><div class="model-name">Small</div><div class="model-desc">Better accuracy</div></label></div>
-                    <div class="model-option"><input type="radio" name="model_option" id="medium" value="medium"><label for="medium"><i class="ri-focus-3-line model-icon"></i><div class="model-name">Medium</div><div class="model-desc">High accuracy</div></label></div>
-                    <div class="model-option"><input type="radio" name="model_option" id="turbo" value="turbo"><label for="turbo"><i class="ri-rocket-line model-icon"></i><div class="model-name">Turbo</div><div class="model-desc">Fast & accurate</div></label></div> <!-- Removed NEW badge -->
-                    <div class="model-option"><input type="radio" name="model_option" id="large" value="large"><label for="large"><i class="ri-cpu-line model-icon"></i><div class="model-name">Large</div><div class="model-desc">Highest accuracy</div></label></div>
+                  <div class="options-title"><i class="ri-computer-line"></i><h3>Local Models</h3></div>
+                  <div class="local-model-grid">
+                    <div class="model-option"><input type="radio" name="model_option" id="tiny" value="tiny" checked><label for="tiny"><i class="ri-speed-mini-line model-icon"></i><div class="model-name">Tiny</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="base" value="base"><label for="base"><i class="ri-scales-line model-icon"></i><div class="model-name">Base</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="small" value="small"><label for="small"><i class="ri-speed-up-line model-icon"></i><div class="model-name">Small</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="medium" value="medium"><label for="medium"><i class="ri-focus-3-line model-icon"></i><div class="model-name">Medium</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="turbo" value="turbo"><label for="turbo"><i class="ri-rocket-line model-icon"></i><div class="model-name">Turbo</div></label></div>
+                    <div class="model-option"><input type="radio" name="model_option" id="large" value="large"><label for="large"><i class="ri-cpu-line model-icon"></i><div class="model-name">Large</div></label></div>
                   </div>
                 </div>
                 <div class="model-options">
                   <div class="options-title"><i class="ri-cloud-line"></i><h3>Cloud Models</h3></div>
-                  <div class="model-grid">
-                    <div class="model-option"><input type="radio" name="model_option" id="whisper-1" value="whisper-1"><label for="whisper-1"><i class="ri-openai-fill model-icon"></i><div class="model-name">Whisper-1</div><div class="model-desc">OpenAI API</div></label></div>
-                    <div class="model-option"><input type="radio" name="model_option" id="nova-3" value="nova-3"><label for="nova-3"><svg class="model-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="30" viewBox="0 0 24 24"><path fill="currentColor" d="M11.203 24H1.517a.364.364 0 0 1-.258-.62l6.239-6.275a.37.37 0 0 1 .259-.108h3.52c2.723 0 5.025-2.127 5.107-4.845a5.004 5.004 0 0 0-4.999-5.148H7.613v4.646c0 .2-.164.364-.365.364H.968a.365.365 0 0 1-.363-.364V.364C.605.164.768 0 .969 0h10.416c6.684 0 12.111 5.485 12.01 12.187C23.293 18.77 17.794 24 11.202 24z"/></svg><div class="model-name">Nova-3</div><div class="model-desc">Deepgram API</div></label></div>
-                    <div class="model-option"><input type="radio" name="model_option" id="gladia" value="gladia"><label for="gladia"><i class="ri-voiceprint-fill model-icon"></i><div class="model-name">Gladia (En)</div><div class="model-desc">Gladia API</div></label></div>
+                  <div class="cloud-model-grid">
+                    <div class="model-option">
+                      <input type="radio" name="model_option" id="whisper-1" value="whisper-1">
+                      <label for="whisper-1"><i class="ri-openai-fill model-icon"></i><div class="model-name">Whisper-1</div><div class="model-desc">OpenAI</div></label>
+                    </div>
+                    <div class="model-option">
+                      <input type="radio" name="model_option" id="gpt-4o-mini-transcribe" value="gpt-4o-mini-transcribe">
+                      <label for="gpt-4o-mini-transcribe"><i class="ri-openai-fill model-icon"></i><div class="model-name">4o Mini</div><div class="model-desc">OpenAI</div></label>
+                   </div>
+                    <div class="model-option">
+                      <input type="radio" name="model_option" id="gpt-4o-transcribe" value="gpt-4o-transcribe">
+                      <label for="gpt-4o-transcribe"><i class="ri-openai-fill model-icon"></i><div class="model-name">4o</div><div class="model-desc">OpenAI</div></label>
+                   </div>
+                    <div class="model-option">
+                      <input type="radio" name="model_option" id="nova-3" value="nova-3">
+                      <label for="nova-3"><svg class="model-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="30" viewBox="0 0 24 24"><path fill="currentColor" d="M11.203 24H1.517a.364.364 0 0 1-.258-.62l6.239-6.275a.37.37 0 0 1 .259-.108h3.52c2.723 0 5.025-2.127 5.107-4.845a5.004 5.004 0 0 0-4.999-5.148H7.613v4.646c0 .2-.164.364-.365.364H.968a.365.365 0 0 1-.363-.364V.364C.605.164.768 0 .969 0h10.416c6.684 0 12.111 5.485 12.01 12.187C23.293 18.77 17.794 24 11.202 24z"/></svg><div class="model-name">Nova-3</div><div class="model-desc">Deepgram</div></label>
+                    </div>
+                    <div class="model-option">
+                      <input type="radio" name="model_option" id="gladia" value="gladia">
+                      <label for="gladia"><i class="ri-voiceprint-fill model-icon"></i><div class="model-name">Gladia</div><div class="model-desc">Gladia</div></label>
+                    </div>
+                    <div class="model-option">
+                      <input type="radio" name="model_option" id="scribe-v1" value="scribe-v1">
+                      <label for="scribe-v1">
+                        <svg class="model-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="30" viewBox="0 0 300 400">
+                          <path fill="currentColor" d="M60 55H120V345H60Z M190 55H250V345H190Z"/>
+                        </svg>
+                        <div class="model-name">Scribe v1</div>
+                        <div class="model-desc">ElevenLabs</div>
+                      </label>
+                    </div>
                   </div>
                 </div>
-                <div class="api-key-section" id="apiKeySection">
+                <!-- API Key Section - Now shared by whisper-1, gpt-4o-mini, gpt-4o -->
+                <div class="api-key-section" id="openaiApiKeySection" style="display: none;">
                   <div class="options-title"><i class="ri-key-2-line"></i><h3>OpenAI API Key</h3></div>
-                  <div class="api-key-input"><input type="password" id="api_key_cloud" name="api_key" placeholder="Enter your OpenAI API key" class="input"><button type="button" class="btn btn-secondary" id="showApiKey"><i class="ri-eye-line"></i></button></div>
-                   <div class="api-key-header">
-                     <h4>How do I get an OpenAI API key?</h4>
-                     <button type="button" class="api-key-toggle"><i class="ri-arrow-down-s-line"></i></button>
-                   </div>
+                  <div class="api-key-input"><input type="password" id="api_key_cloud" name="api_key_cloud" placeholder="Enter your OpenAI API key" class="input"><button type="button" class="btn btn-secondary" id="showOpenApiKey"><i class="ri-eye-line"></i></button></div>
+                  <div class="api-key-header">
+                    <h4>How do I get an OpenAI API key?</h4>
+                    <button type="button" class="api-key-toggle"><i class="ri-arrow-down-s-line"></i></button>
+                  </div>
                   <div class="api-key-instructions">
                     <ol>
-                      <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">platform.openai.com/api-keys</a></li>
-                      <li>Create an account or sign in</li>
-                      <li>Click "Create new secret key"</li>
-                      <li>Give it a name (e.g., "Kaira")</li>
-                      <li>Copy and paste your API key to the input field above</li>
+                      <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">platform.openai.com</a></li>
+                      <li>Create an account or sign in.</li>
+                      <li>Navigate to the "API keys" section.</li>
+                      <li>Click "+ Create new secret key".</li>
+                      <li>Copy the key immediately and paste it here.</li>
                     </ol>
                     <p class="small-note">Use a secure password manager to store your API key. Avoid saving it in the browser unless you understand the risks.</p>
                   </div>
@@ -746,7 +851,7 @@
                     <p class="small-note">Use a secure password manager to store your API key. Avoid saving it in the browser unless you understand the risks.</p>
                   </div>
                 </div>
-                <div class="api-key-section" id="gladiaApiKeySection" style="display: none;">
+                <div class="api-key-section" id="gladiaApiKeySection" >
                   <div class="options-title"><i class="ri-key-2-line"></i><h3>Gladia API Key</h3></div>
                   <div class="api-key-input"><input type="password" id="gladia_api_key" name="gladia_api_key" placeholder="Enter your Gladia API key" class="input"><button type="button" class="btn btn-secondary" id="showGladiaApiKey"><i class="ri-eye-line"></i></button></div>
                    <div class="api-key-header">
@@ -764,6 +869,28 @@
                     <p class="small-note">Use a secure password manager to store your API key. Avoid saving it in the browser unless you understand the risks.</p>
                    </div>
                 </div>
+                 <!-- ElevenLabs API Key Section -->
+                <div class="api-key-section" id="elevenlabsApiKeySection" style="display: none;">
+                    <div class="options-title"><i class="ri-key-2-line"></i><h3>ElevenLabs API Key</h3></div>
+                    <div class="api-key-input">
+                        <input type="password" id="elevenlabs_api_key" name="elevenlabs_api_key" placeholder="Enter your ElevenLabs API key" class="input">
+                        <button type="button" class="btn btn-secondary" id="showElevenLabsApiKey"><i class="ri-eye-line"></i></button>
+                    </div>
+                    <div class="api-key-header">
+                        <h4>How do I get an ElevenLabs API key?</h4>
+                        <button type="button" class="api-key-toggle"><i class="ri-arrow-down-s-line"></i></button>
+                    </div>
+                    <div class="api-key-instructions">
+                        <ol>
+                            <li>Go to <a href="https://elevenlabs.io/" target="_blank" rel="noopener noreferrer">elevenlabs.io</a> and sign up or log in.</li>
+                            <li>Select "API + API KEYS" in top navigation panel.</li>
+                            <li>Create API Key.</li>
+                            <li>Give it a name (e.g., "Kaira") and copy the key.</li>
+                            <li>Paste your key here.</li>
+                        </ol>
+                        <p class="small-note">Use a secure password manager to store your API key. Avoid saving it in the browser unless you understand the risks.</p>
+                    </div>
+                </div>
                 <div id="deepgramOptions" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
                   <div class="options-title"><i class="ri-robot-line"></i><h3>Deepgram AI Features (English Only)</h3></div>
                   <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
@@ -773,9 +900,18 @@
                     <p class="api-key-hint" id="topicsHint" style="margin-top: -0.5rem; margin-left: 2rem; display: none; color: var(--text-secondary); font-size: 0.9rem;">Labels main topics for quick understanding.</p>
                     </div>
                 </div>
+                                  <!-- GPT-4o Prompt Section - Only shown for GPT-4o models -->
+                                  <div id="gpt4o-prompt-section" style="display: none; margin-top: 15px;">
+                                    <div class="options-title"><i class="ri-chat-1-line"></i><h3>Transcription Prompt</h3></div>
+                                    <div>
+                                      <textarea id="gpt4o_prompt" name="gpt4o_prompt" 
+                                                placeholder="Enter optional prompt. Output can be improved by adding specific details about the content or translate to a different language."
+                                                class="input" style="min-height: 90px; width: 100%;"></textarea>
+                                    </div>
+                                  </div>
                  <!-- Price Calculator Section -->
                  <div id="priceCalculator" style="display: none; margin-top: 1.5rem; padding: 1rem; background-color: var(--secondary-bg); border-radius: var(--radius); border: 1px solid var(--border-color);">
-                    <div class="options-title"><h4>Estimated API Call Cost</h4><a id="pricingDocLink" href="#" target="_blank" style="margin-left: auto; color: var(--text-tertiary); cursor: pointer;" title="Pricing model"><i class="ri-question-line" style="opacity: 0.7;"></i></a></div>
+                    <div class="options-title"><h4>Price Calculator</h4><a id="pricingDocLink" href="#" target="_blank" style="margin-left: auto; color: var(--text-tertiary); cursor: pointer;" title="Pricing model"><i class="ri-question-line" style="opacity: 0.7;"></i></a></div>
                     <div class="price-details">
                         <div class="price-row" id="fileDurationRow"><span class="price-label">File Duration:</span><span class="price-value" id="fileDuration">N/A</span></div>
                         <div class="price-row" id="apiPricingRow"><span class="price-label" id="apiPricingLabel">API Base Cost:</span><span class="price-value" id="apiPricingValue">N/A</span></div>
@@ -788,7 +924,7 @@
 
               <!-- Transcribe Button outside settings-panel for sticky bottom effect -->
               <div class="transcribe-button-container">
-                <button type="submit" class="btn btn-primary btn-large" id="transcribeButton" disabled><i class="ri-draft-line"></i><span>Transcribe</span></button>
+                <button type="submit" class="btn btn-primary btn-large" id="transcribeButton"><i class="ri-draft-line"></i><span>Transcribe</span></button>
               </div>
 
             </div> <!-- End .settings-column -->
@@ -883,6 +1019,8 @@
     const AVG_TOKENS_PER_WORD = 1.3;
     // Estimate summary output length as percentage of input
     const SUMMARY_OUTPUT_PERCENTAGE = 0.2; // 20% of input length
+    // ElevenLabs Scribe v1 pricing (using Creator tier for estimation)
+    const ELEVENLABS_SCRIBE_COST_PER_MINUTE = 0.35 / 60; // ~ $0.00583/min
 
     // --- DOM Elements ---
     const dropZone = document.getElementById('dropZone');
@@ -895,7 +1033,7 @@
     const progressBar = document.getElementById('progressBar');
     const progressMessage = document.getElementById('progressMessage');
     const progressPercent = document.getElementById('progressPercent');
-    const apiKeySection = document.getElementById('apiKeySection');
+    const apiKeySection = document.getElementById('apiKeySection'); // OpenAI API Key section
     const previewPlayer = document.getElementById('previewPlayer');
     const audioPlayerContainer = document.getElementById('audioPlayer'); // Div containing audio controls + waveform
     const waveformEl = document.getElementById('waveform'); // Div specifically for waveform rendering
@@ -928,6 +1066,7 @@
     const estimatedCostValue = document.getElementById('estimatedCost');
     const deepgramApiKeySection = document.getElementById('deepgramApiKeySection');
     const gladiaApiKeySection = document.getElementById('gladiaApiKeySection');
+    const elevenlabsApiKeySection = document.getElementById('elevenlabsApiKeySection');
 
     // --- Event Listeners ---
     document.addEventListener('DOMContentLoaded', function() {
@@ -944,13 +1083,27 @@
       document.getElementById('fontDecreaseBtn').addEventListener('click', decreaseFontSize);
       document.getElementById('fontIncreaseBtn').addEventListener('click', increaseFontSize);
 
+      // Password visibility toggles
+      document.getElementById('showOpenApiKey').addEventListener('click', function() {
+        togglePasswordVisibility('api_key_cloud', this);
+      });
+      document.getElementById('showDeepgramApiKey').addEventListener('click', function() {
+        togglePasswordVisibility('deepgram_api_key', this);
+      });
+      document.getElementById('showGladiaApiKey').addEventListener('click', function() {
+        togglePasswordVisibility('gladia_api_key', this);
+      });
+      document.getElementById('showElevenLabsApiKey').addEventListener('click', function() {
+        togglePasswordVisibility('elevenlabs_api_key', this);
+      });
+
       // Theme Button Listeners
       document.querySelectorAll('.button-tab[data-theme]').forEach(button => {
         button.addEventListener('click', function() {
           switchTheme(this.dataset.theme);
         });
       });
-      
+
       // Home Button Listeners
       document.querySelectorAll('.button-tab[data-content]').forEach(button => {
         button.addEventListener('click', function() {
@@ -958,39 +1111,134 @@
         });
       });
 
-      // Tab Button Listeners 
+      // Tab Button Listeners
       document.querySelectorAll('.button-tab[data-tab]').forEach(tab => tab.addEventListener('click', function() { switchTab(this.dataset.tab); }));
-      document.querySelectorAll('input[name="model_option"]').forEach(radio => radio.addEventListener('change', handleModelChange));
-      document.getElementById('showApiKey').addEventListener('click', toggleApiKeyVisibility);
-      document.getElementById('showDeepgramApiKey').addEventListener('click', function() { togglePasswordVisibility('deepgram_api_key', this); });
-      document.getElementById('showGladiaApiKey').addEventListener('click', function() { togglePasswordVisibility('gladia_api_key', this); });
+
+      // Model selection listeners
+      document.querySelectorAll('input[name="model_option"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+          handleModelSelection(); // Call the new function to manage UI based on model
+        });
+      });
+      
+      // Feature toggle listeners
       document.getElementById('notifyToggle').addEventListener('change', requestNotificationPermission);
       summarizeCheckbox.addEventListener('change', handleDeepgramFeatureChange);
       topicsCheckbox.addEventListener('change', handleDeepgramFeatureChange);
+      
+      // Video/Waveform toggle buttons
+      showVideoBtn.addEventListener('click', showVideoPreview);
+      showWaveformBtn.addEventListener('click', showWaveformPreview);
 
+      // Initialize model-related UI elements
+      handleModelSelection();
+      
+      // Rest of initialization
+      connectSocket();
+      loadSavedApiKeys();
+      initializeTheme();
+      setupApiKeyHeadersToggles();
+      audioPlayerContainer.style.display = 'none'; // Hide audio container initially
+      updateTranscribeButtonText();
+      document.getElementById('job_id').value = 'job_' + Math.random().toString(36).substr(2, 9); // Initial Job ID
+      
+      // Make sure price calculator exists
+      if (document.getElementById('priceCalculator')) {
+        updatePriceCalculator(); // Initial call
+      } else {
+        console.error('Price calculator element not found!');
+      }
+      
+      // Initialize UI
+      clearQueueBtn.disabled = true;
+      downloadButton.disabled = true;
+      copyButton.disabled = true;
+      
+      // Initialize layout based on screen size
+      function handleScreenSize() {
+        const sidebar = document.querySelector('.sidebar');
+        const appContainer = document.querySelector('.app-container');
+        const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+        const toggleIcon = sidebarToggleBtn.querySelector('i');
+        
+        if (window.innerWidth <= 1200) {
+          // Small screens - hide sidebar and info button
+          sidebar.style.display = 'none';
+          appContainer.style.gridTemplateColumns = '1fr';
+          appContainer.style.gridTemplateAreas = '"header" "main"';
+          sidebarToggleBtn.style.display = 'none';
+        } else {
+          // Large screens - show sidebar and info button
+          sidebar.style.display = 'flex';
+          appContainer.style.gridTemplateColumns = 'var(--sidebar-width) 1fr';
+          appContainer.style.gridTemplateAreas = '"header header" "sidebar main"';
+          sidebarToggleBtn.style.display = 'flex';
+          toggleIcon.className = 'ri-layout-left-line';
+        }
+      }
+      
+      // Call on load and when window is resized
+      handleScreenSize();
+      window.addEventListener('resize', handleScreenSize);
+      
+      // Sidebar toggle button event listener
+      document.getElementById('sidebarToggleBtn').addEventListener('click', function() {
+        const sidebar = document.querySelector('.sidebar');
+        const appContainer = document.querySelector('.app-container');
+        const mainContainer = document.querySelector('.main-container');
+        const toggleIcon = this.querySelector('i');
+        
+        if (getComputedStyle(sidebar).display === 'none') {
+          // Show sidebar
+          sidebar.style.display = 'flex';
+          appContainer.style.gridTemplateColumns = 'var(--sidebar-width) 1fr';
+          appContainer.style.gridTemplateAreas = '"header header" "sidebar main"';
+          toggleIcon.className = 'ri-layout-left-line';
+        } else {
+          // Hide sidebar
+          sidebar.style.display = 'none';
+          appContainer.style.gridTemplateColumns = '1fr';
+          appContainer.style.gridTemplateAreas = '"header" "main"';
+          toggleIcon.className = 'ri-layout-left-2-line';
+        }
+      });
+    });
+
+    // Helper function to setup API key headers toggle
+    function setupApiKeyHeadersToggles() {
       // API Key Instruction Toggle Listeners
       document.querySelectorAll('.api-key-header').forEach(header => {
         header.addEventListener('click', function() {
           const instructions = this.nextElementSibling;
           const icon = this.querySelector('i');
-          const isVisible = instructions.style.display === 'block';
+          
+          if (!instructions || !instructions.classList.contains('api-key-instructions')) {
+            console.error('Could not find instructions element', instructions);
+            return;
+          }
+
+          // Force-check the current display style
+          const isVisible = window.getComputedStyle(instructions).display !== 'none';
+          
+          // Explicitly set the style
           instructions.style.display = isVisible ? 'none' : 'block';
           icon.className = isVisible ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line';
         });
       });
-
-      // Video/Waveform toggle buttons
-      showVideoBtn.addEventListener('click', showVideoPreview);
-      showWaveformBtn.addEventListener('click', showWaveformPreview);
-
-      connectSocket();
-      initializeTheme();
-      audioPlayerContainer.style.display = 'none'; // Hide audio container initially
-      updateTranscribeButtonText();
-      document.getElementById('job_id').value = 'job_' + Math.random().toString(36).substr(2, 9); // Initial Job ID
-      updatePriceCalculator(); // Initial call
-      handleModelChange(); // Initialize model highlighting in the Model Info panel
-    });
+      
+      // Ensure all instruction divs start hidden
+      document.querySelectorAll('.api-key-instructions').forEach(instructions => {
+        instructions.style.display = 'none';
+      });
+    }
+    
+    // Helper to load saved API keys from localStorage
+    function loadSavedApiKeys() {
+      document.getElementById('api_key_cloud').value = localStorage.getItem('openaiApiKey') || '';
+      document.getElementById('deepgram_api_key').value = localStorage.getItem('deepgramApiKey') || '';
+      document.getElementById('gladia_api_key').value = localStorage.getItem('gladiaApiKey') || '';
+      document.getElementById('elevenlabs_api_key').value = localStorage.getItem('elevenlabsApiKey') || '';
+    }
 
     // --- File Handling ---
     function handleFileSelection(e) { processSelectedFiles(e.target.files); }
@@ -1015,9 +1263,9 @@
                  showToast('warning', 'Unsupported File', `${file.name} has an unsupported type.`);
                  return; // Skip this file
             }
-            if (file.size > 500 * 1024 * 1024) { // Example: 500MB limit
+             if (file.size > 1024 * 1024 * 1024) { // Example: 1GB limit (as per ElevenLabs docs)
                  console.warn(`Skipping large file: ${file.name} (${formatFileSize(file.size)})`);
-                 showToast('warning', 'File Too Large', `${file.name} exceeds the size limit.`);
+                 showToast('warning', 'File Too Large', `${file.name} exceeds the 1GB size limit.`);
                  return; // Skip this file
             }
 
@@ -1153,7 +1401,14 @@
             showToast('info', 'Transcription Cancelled', 'Process stopped.');
             if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
                 const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Safe access
-                if (fileId) updateFileQueueItemStatusById(fileId, 'Cancelled');
+                if (fileId) {
+                    updateFileQueueItemStatusById(fileId, 'Cancelled');
+                    const fileInQueue = fileQueue.find(f => f.id === fileId);
+                    if(fileInQueue) {
+                        // Don't mark as error, just update the queue display
+                        updateFileQueue();
+                    }
+                }
             }
             resetTranscriptionUI(); // Fully reset UI and stop queue
          }
@@ -1196,14 +1451,14 @@
             };
 
             const checkboxContainer = document.createElement('div'); checkboxContainer.className = 'file-checkbox';
-            
+
             if (showCheckboxes) {
                 // Checkbox Button for each file
                 const checkboxBtn = document.createElement('button');
                 checkboxBtn.style.background = 'none';
                 checkboxBtn.style.border = 'none';
                 checkboxBtn.style.padding = '0';
-                checkboxBtn.style.width = '18px'; 
+                checkboxBtn.style.width = '18px';
                 checkboxBtn.style.height = '18px';
                 checkboxBtn.style.cursor = 'pointer';
 
@@ -1216,27 +1471,27 @@
                 checkboxVisual.style.alignItems = 'center';
                 checkboxVisual.style.justifyContent = 'center';
                 checkboxVisual.style.transition = 'var(--transition)';
-                
+
                 if (file.selected !== false) {
                     checkboxVisual.style.backgroundColor = 'var(--primary-color)';
                     checkboxVisual.style.borderColor = 'var(--primary-color)';
                     checkboxVisual.innerHTML = '<i class="ri-check-line" style="color: white; font-size: 12px;"></i>';
                 }
-                
+
                 // Add hover effect to clearly show it's clickable
                 checkboxBtn.onmouseover = function() {
                     checkboxVisual.style.borderColor = 'var(--primary-color)';
                     this.style.cursor = 'auto';
                 };
-                
+
                 checkboxBtn.onmouseout = function() {
                     if (file.selected === false) {
                         checkboxVisual.style.borderColor = 'var(--border-color)';
                     }
                 };
-                
+
                 checkboxBtn.appendChild(checkboxVisual);
-                
+
                 // Click handler
                 checkboxBtn.onclick = function(e) {
                     e.stopPropagation();
@@ -1244,12 +1499,12 @@
                     updateFileQueue();
                     updateTranscribeButtonText();
                 };
-                
+
                 checkboxContainer.appendChild(checkboxBtn);
             }
 
-            const fileIcon = document.createElement('div'); 
-            fileIcon.className = 'file-icon'; 
+            const fileIcon = document.createElement('div');
+            fileIcon.className = 'file-icon';
             if (file.type.startsWith('video/')) {
                 fileIcon.innerHTML = '<i class="ri-file-video-line"></i>';
             } else {
@@ -1349,7 +1604,9 @@
              const sortedModels = [...completedModelsByFile[fileId]].sort();
              sortedModels.forEach(model => {
                  const modelTag = document.createElement('span'); modelTag.className = 'file-model';
-                 modelTag.textContent = model; modelsContainer.appendChild(modelTag);
+                 // Map internal model ID to display name if needed
+                 modelTag.textContent = model.replace('_', '-'); // Example mapping
+                 modelsContainer.appendChild(modelTag);
              });
          }
      }
@@ -1437,16 +1694,21 @@
 
     // --- Transcription Process ---
     function handleFormSubmit(e) {
-      e.preventDefault();
-      if (generationInProgress) { cancelCurrentTranscription(); return; }
+      e.preventDefault(); // Prevent default form submission
+      if (generationInProgress) { 
+          cancelCurrentTranscription(); 
+          return; 
+      }
       activeProcessingQueue = fileQueue.filter(file => file.selected !== false && !file.error);
       if (activeProcessingQueue.length === 0) {
-        showToast('warning', 'No Files Ready', fileQueue.some(f=>f.selected) ? 'Selected files have errors or none are selected.' : 'Please select files to transcribe.'); return;
+        showToast('warning', 'No Files Ready', fileQueue.some(f=>f.selected) ? 'Selected files have errors or none are selected.' : 'Please select files to transcribe.'); 
+        return;
       }
       console.log(`Starting transcription batch for ${activeProcessingQueue.length} selected files.`);
-      currentProcessingIndex = -1; isCancelled = false;
-      processNextFileInQueue(); // Start the first one
-    }
+      currentProcessingIndex = -1; 
+      isCancelled = false;
+      processNextFileInQueue();
+}
 
     function processNextFileInQueue() {
       if (isCancelled) { console.log("Queue stopped by cancellation."); resetTranscriptionUI(); isCancelled = false; return; }
@@ -1464,7 +1726,7 @@
 
       // Select the file in the UI *before* potentially showing preview (which might error)
       currentActiveFile = currentFile.id;
-      updateFileQueue(); // Update UI highlights/status
+      updateFileQueue();
 
       showFilePreview(currentFile); // Show preview and update duration/calculator
       updateModelCompletionStatus(currentFile.id);
@@ -1483,36 +1745,60 @@
         const formData = new FormData();
         formData.append('file', file);
         formData.append('job_id', currentJobId);
-        formData.append('model_option', selectedModel); // *** Send selected model for ALL endpoints ***
+        formData.append('model_option', selectedModel); // Send selected model for local endpoint too
 
         let endpoint = '/transcribe_local'; // Default to local
+        let apiKey = '';
 
         // Configure for cloud models
-        if (selectedModel === "whisper-1") {
-            endpoint = "/transcribe";
-            const apiKey = document.getElementById('api_key_cloud').value;
-            if (!apiKey) { handleApiError(file.id, 'OpenAI API Key Missing'); return; }
-            formData.append('api_key', apiKey); localStorage.setItem('openaiApiKey', apiKey);
-        } else if (selectedModel === "nova-3") {
-            endpoint = "/transcribe_deepgram";
-            const deepgramApiKey = document.getElementById('deepgram_api_key').value;
-            if (!deepgramApiKey) { handleApiError(file.id, 'Deepgram API Key Missing'); return; }
-            formData.append('deepgram_api_key', deepgramApiKey); localStorage.setItem('deepgramApiKey', deepgramApiKey);
-            formData.append('summarize_enabled', summarizeCheckbox.checked ? 'true' : 'false');
-            formData.append('topics_enabled', topicsCheckbox.checked ? 'true' : 'false');
-            // Supports 10 languages (multi: English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian and Dutch)
-        } else if (selectedModel === "gladia") {
-            endpoint = "/transcribe_gladia";
-            const gladiaApiKey = document.getElementById('gladia_api_key').value;
-            if (!gladiaApiKey) { handleApiError(file.id, 'Gladia API Key Missing'); return; }
-            formData.append('gladia_api_key', gladiaApiKey); localStorage.setItem('gladiaApiKey', gladiaApiKey);
-             // Language forced to 'en' on backend for now
+        switch(selectedModel) {
+            case "whisper-1":
+                endpoint = "/transcribe";
+                apiKey = document.getElementById('api_key_cloud').value;
+                if (!apiKey) { handleApiError(file.id, 'OpenAI API Key Missing'); return; }
+                formData.append('api_key', apiKey); localStorage.setItem('openaiApiKey', apiKey);
+                break;
+            case "gpt-4o-transcribe":
+            case "gpt-4o-mini-transcribe":
+                endpoint = selectedModel === "gpt-4o-transcribe" ? 
+                           "/transcribe_openai_gpt4o" : "/transcribe_openai_gpt4o_mini";
+                apiKey = document.getElementById('api_key_cloud').value;
+                if (!apiKey) { handleApiError(file.id, 'OpenAI API Key Missing'); return; }
+                formData.append('api_key', apiKey); localStorage.setItem('openaiApiKey', apiKey);
+                
+                // Add prompt if provided
+                const prompt = document.getElementById('gpt4o_prompt').value.trim();
+                if (prompt) {
+                    formData.append('prompt', prompt);
+                    console.log(`Using prompt for ${selectedModel}: ${prompt.substring(0, 50)}...`);
+                }
+                break;
+            case "nova-3":
+                endpoint = "/transcribe_deepgram";
+                apiKey = document.getElementById('deepgram_api_key').value;
+                if (!apiKey) { handleApiError(file.id, 'Deepgram API Key Missing'); return; }
+                formData.append('deepgram_api_key', apiKey); localStorage.setItem('deepgramApiKey', apiKey);
+                formData.append('summarize_enabled', summarizeCheckbox.checked ? 'true' : 'false');
+                formData.append('topics_enabled', topicsCheckbox.checked ? 'true' : 'false');
+                break;
+            case "gladia":
+                endpoint = "/transcribe_gladia";
+                apiKey = document.getElementById('gladia_api_key').value;
+                if (!apiKey) { handleApiError(file.id, 'Gladia API Key Missing'); return; }
+                formData.append('gladia_api_key', apiKey); localStorage.setItem('gladiaApiKey', apiKey);
+                break;
+            case "scribe-v1":
+                endpoint = "/transcribe_elevenlabs";
+                apiKey = document.getElementById('elevenlabs_api_key').value;
+                if (!apiKey) { handleApiError(file.id, 'ElevenLabs API Key Missing'); return; }
+                formData.append('elevenlabs_api_key', apiKey); localStorage.setItem('elevenlabsApiKey', apiKey);
+                break;
         }
 
         // Update UI and Start Transcription
         loadingOverlay.style.display = 'flex'; startTypewriterAnimation();
         updateProgress(0, 'Uploading file...');
-        updateFileQueueItemStatusById(file.id, 'Processing'); // Update status immediately
+        updateFileQueueItemStatusById(file.id, 'Processing');
 
         fetch(endpoint, { method: 'POST', body: formData })
         .then(response => {
@@ -1546,16 +1832,32 @@
     function cancelCurrentTranscription() {
       if (generationInProgress && activeProcessingQueue.length > 0 && currentProcessingIndex >= 0) {
           const jobIdToCancel = document.getElementById('job_id').value;
-          const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Get ID safely
+          const fileId = activeProcessingQueue[currentProcessingIndex]?.id;
           console.log(`User cancelling job: ${jobIdToCancel} for file: ${fileId}`);
           socket.emit('cancel_transcription', { job_id: jobIdToCancel });
-          isCancelled = true; // Set flag to stop queue processing
-          // Don't set generationInProgress = false here, let the socket event or next step handle it
+          
+          // Immediately clean up UI
           stopTypewriterAnimation();
           showStatsLoading(false);
-          if (fileId) updateFileQueueItemStatusById(fileId, 'Cancelled'); // Update UI immediately
-          // Full UI reset will happen via socket event or processNextFileInQueue check
-      } else { console.log("Nothing to cancel."); resetTranscriptionUI(); } // Reset if cancel clicked inappropriately
+          loadingOverlay.style.display = 'none';
+          progressContainer.classList.remove('active');
+          
+          if (fileId) {
+              updateFileQueueItemStatusById(fileId, 'Cancelled');
+              const fileInQueue = fileQueue.find(f => f.id === fileId);
+              if(fileInQueue) {
+                  updateFileQueue();
+              }
+          }
+          
+          generationInProgress = false;
+          isCancelled = true;
+          
+          updateTranscribeButtonText();
+      } else { 
+          console.log("Nothing to cancel."); 
+          resetTranscriptionUI(); 
+      }
     }
 
     // --- Media Preview & Sync ---
@@ -1641,20 +1943,20 @@
             audioPlayerContainer.style.display = 'flex'; // Show audio container
             // Use the main 'wavesurfer' instance for direct audio
             const colors = getWaveformColors();
-            wavesurfer = WaveSurfer.create({ 
-                container: '#waveform', 
-                waveColor: colors.waveColor, 
-                progressColor: colors.progressColor, 
-                height: 60, 
-                responsive: true, 
-                backend: 'MediaElement', 
-                mediaControls: false, 
-                normalize: true, 
-                partialRender: true 
+            wavesurfer = WaveSurfer.create({
+                container: '#waveform',
+                waveColor: colors.waveColor,
+                progressColor: colors.progressColor,
+                height: 60,
+                responsive: true,
+                backend: 'MediaElement',
+                mediaControls: false,
+                normalize: true,
+                partialRender: true
             });
             wavesurfer.isReady = false;
             wavesurfer.load(currentPreviewedFile.objectURL);
-            wavesurfer.on('ready', () => { wavesurfer.isReady = true; currentFileDuration = wavesurfer.getDuration() || 0; document.querySelector(".time-right").textContent = formatTime(currentFileDuration); document.querySelector(".time-left").textContent = "0:00"; attachSyncToPlayer(); updatePriceCalculator(); });
+            wavesurfer.on('ready', () => { wavesurfer.isReady = true; currentFileDuration = wavesurfer.getDuration() || 0; document.querySelector(".time-right").textContent = formatTime(currentFileDuration); document.querySelector(".time-left").textContent = "0:00"; attachSyncToPlayer(); updatePriceCalculator(); setupPlayerEventHandlers(); }); // Added setupPlayerEventHandlers here too
             wavesurfer.on('error', (err) => { showToast('error', 'Audio Error', 'Failed to load audio waveform.'); currentFileDuration = 0; updatePriceCalculator(); });
             setupAudioSeekPreview(); // Add seek preview for audio
         } else {
@@ -1667,16 +1969,16 @@
          // Use the separate instance for video's waveform
         if (videoWavesurfer) videoWavesurfer.destroy();
         const colors = getWaveformColors();
-        videoWavesurfer = WaveSurfer.create({ 
-            container: '#waveform', 
-            waveColor: colors.waveColor, 
-            progressColor: colors.progressColor, 
-            height: 60, 
-            responsive: true, 
-            backend: 'MediaElement', 
-            mediaControls: false, 
-            normalize: true, 
-            partialRender: true 
+        videoWavesurfer = WaveSurfer.create({
+            container: '#waveform',
+            waveColor: colors.waveColor,
+            progressColor: colors.progressColor,
+            height: 60,
+            responsive: true,
+            backend: 'MediaElement',
+            mediaControls: false,
+            normalize: true,
+            partialRender: true
         });
         videoWavesurfer.isReady = false;
         videoWavesurfer.load(url); // Load the same video URL
@@ -1915,7 +2217,7 @@
         document.querySelector('#srtTranscript .transcript-body').innerHTML = results.srt_text;
         document.querySelector('#vttTranscript .transcript-body').innerHTML = results.vtt_text;
         document.querySelector('#tsvTranscript .transcript-body').innerHTML = results.tsv_text;
-        
+
         // Deepgram features: Set Summary and Topics if available
         const isDeepgram = results.model === 'nova-3';
         if (isDeepgram && results.summary_text) {
@@ -1924,7 +2226,7 @@
         if (isDeepgram && results.topics_data) {
             topicsTranscriptDiv.querySelector('.transcript-body').innerHTML = formatTopics(results.topics_data);
         }
-        
+
         // Show/hide special tabs
         summaryTabBtn.style.display = isDeepgram && results.summary_text ? 'inline-flex' : 'none';
         topicsTabBtn.style.display = isDeepgram && results.topics_data ? 'inline-flex' : 'none';
@@ -1932,7 +2234,7 @@
         const activeTabBtn = document.querySelector('.button-tab[data-tab].active');
         if (activeTabBtn?.style.display === 'none') switchTab('default'); // Switch if current tab became hidden
 
-        document.querySelector('.transcript-title').innerHTML = `<i class="ri-file-text-line"></i><h2>${results.fileName} <span style="opacity:0.6; font-weight:normal; font-size:0.9rem;">(${results.model} - ${results.language})</span></h2>`; // Show detected lang
+        document.querySelector('.transcript-title').innerHTML = `<i class="ri-file-text-line"></i><h2>${results.fileName} <span style="opacity:0.6; font-weight:normal; font-size:0.9rem;">(${results.model.replace('_', '-')} - ${results.language})</span></h2>`; // Show detected lang & formatted model
         updateActionButtons(); // Enable copy/download
         loadingOverlay.style.display = 'none'; stopTypewriterAnimation();
         updateTranscriptionStats(results.default_transcript, results.elapsed_time); // Pass elapsed time
@@ -2060,7 +2362,7 @@
         const a = document.createElement('a');
         a.href = url;
         // Include model and tab type in filename
-        a.download = `${baseFileName}_${modelName}_${activeTab}.${fileExtension}`;
+        a.download = `${baseFileName}_${modelName.replace('_','-')}_${activeTab}.${fileExtension}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -2125,30 +2427,30 @@
      function countWords(text) { return text ? text.split(/\s+/).filter(Boolean).length : 0; }
 
     // --- Matrix raindrop animation when processing transcript ---
-    function startTypewriterAnimation() { 
-        stopTypewriterAnimation(); 
-        const container = document.getElementById('typewriterContainer'); 
-        if (!container) return; 
-        container.innerHTML = ''; 
-        const letterCount = 150; 
-        
-        function createRandomLetter() { 
-            if (!container || container.childNodes.length >= letterCount) return; 
-            
-            const letter = document.createElement('div'); 
-            letter.className = 'typewriter-letter'; 
-            
+    function startTypewriterAnimation() {
+        stopTypewriterAnimation();
+        const container = document.getElementById('typewriterContainer');
+        if (!container) return;
+        container.innerHTML = '';
+        const letterCount = 150;
+
+        function createRandomLetter() {
+            if (!container || container.childNodes.length >= letterCount) return;
+
+            const letter = document.createElement('div');
+            letter.className = 'typewriter-letter';
+
             // Random position throughout the container
             const x = Math.floor(Math.random() * container.offsetWidth);
             const y = Math.floor(Math.random() * container.offsetHeight);
-            letter.style.left = `${x}px`; 
-            letter.style.top = `${y}px`; 
-            
+            letter.style.left = `${x}px`;
+            letter.style.top = `${y}px`;
+
             // Weighted language selection
             let selectedLanguage;
             const languageKeys = Object.keys(languages);
             const useLatin = Math.random() < 0.7; // Higher chance for Latin letters to show
-            
+
             if (useLatin) {
                 selectedLanguage = languages.latin;
             } else {
@@ -2156,90 +2458,81 @@
                 const nonLatinKeys = languageKeys.filter(key => key !== 'latin');
                 selectedLanguage = languages[nonLatinKeys[Math.floor(Math.random() * nonLatinKeys.length)]];
             }
-            
-            letter.textContent = selectedLanguage[Math.floor(Math.random() * selectedLanguage.length)]; 
-            
+
+            letter.textContent = selectedLanguage[Math.floor(Math.random() * selectedLanguage.length)];
+
             // Random size between 16px and 24px
             const size = Math.floor(16 + Math.random() * 8);
-            letter.style.fontSize = `${size}px`; 
-            
-            container.appendChild(letter); 
-            
+            letter.style.fontSize = `${size}px`;
+
+            container.appendChild(letter);
+
             // Remove after animation completes
-            setTimeout(() => { 
-                if (letter.parentNode === container) container.removeChild(letter); 
-            }, 4000); 
-        } 
-        
+            setTimeout(() => {
+                if (letter.parentNode === container) container.removeChild(letter);
+            }, 4000);
+        }
+
         // Create characters at a slower pace
-        typewriterInterval = setInterval(() => { 
-            for (let i = 0; i < 3; i++) createRandomLetter(); 
-        }, 400); 
+        typewriterInterval = setInterval(() => {
+            for (let i = 0; i < 3; i++) createRandomLetter();
+        }, 400);
     }
     function stopTypewriterAnimation() { if (typewriterInterval) { clearInterval(typewriterInterval); typewriterInterval = null; const container = document.getElementById('typewriterContainer'); if (container) container.innerHTML = ''; } }
     function initializeTheme() { const savedTheme = localStorage.getItem('theme') || 'light'; applyTheme(savedTheme); }
-    function switchTheme(themeName) { applyTheme(themeName); localStorage.setItem('theme', themeName); showToast('info', 'Theme Changed', `Switched to ${themeName.charAt(0).toUpperCase() + themeName.slice(1)} theme`); }
-    function applyTheme(themeName) {
-        document.body.classList.remove('Toffee-theme', 'minty-theme', 'nova-theme');
-        if (themeName !== 'light') document.body.classList.add(`${themeName}-theme`);
-
-        // Update active state for all theme buttons
-        document.querySelectorAll('.button-tab[data-theme]').forEach(btn => {
-            if (btn.dataset.theme === themeName) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
-
-        // Update wavesurfer colors
-        const waveColor = getComputedStyle(document.body).getPropertyValue('--text-tertiary').trim();
-        const progressColor = getComputedStyle(document.body).getPropertyValue('--primary-color').trim();
-        if(wavesurfer){
-            try { wavesurfer.setWaveColor(waveColor); wavesurfer.setProgressColor(progressColor); }
-            catch(e){ /* Silently handle error */ }
-        }
-        if(videoWavesurfer){
-             try { videoWavesurfer.setWaveColor(waveColor); videoWavesurfer.setProgressColor(progressColor); }
-             catch(e){ /* Silently handle error */ }
-         }
-    }
-    function toggleApiKeyVisibility() { const input = document.getElementById('api_key_cloud'), btn = document.getElementById('showApiKey'); if (input.type === 'password') { input.type = 'text'; btn.innerHTML = '<i class="ri-eye-off-line"></i>'; } else { input.type = 'password'; btn.innerHTML = '<i class="ri-eye-line"></i>'; } }
+    // function switchTheme(themeName) { applyTheme(themeName); localStorage.setItem('theme', themeName); showToast('info', 'Theme Changed', `Switched to ${themeName.charAt(0).toUpperCase() + themeName.slice(1)} theme`); } // Replaced by below
+    // function toggleApiKeyVisibility() { const input = document.getElementById('api_key_cloud'), btn = document.getElementById('showApiKey'); if (input.type === 'password') { input.type = 'text'; btn.innerHTML = '<i class="ri-eye-off-line"></i>'; } else { input.type = 'password'; btn.innerHTML = '<i class="ri-eye-line"></i>'; } }
     function togglePasswordVisibility(inputId, button) { const input = document.getElementById(inputId); if (input.type === "password") { input.type = "text"; button.innerHTML = '<i class="ri-eye-off-line"></i>'; } else { input.type = "password"; button.innerHTML = '<i class="ri-eye-line"></i>'; } }
     function showToast(type, title, message) { const tc = document.querySelector('.toast-container'), t = document.createElement('div'); t.className = `toast toast-${type}`; t.innerHTML = `<div class="toast-icon"><i class="ri-${type === 'success' ? 'check-line' : type === 'error' ? 'error-warning-line' : type === 'warning' ? 'alert-line' : 'information-line'}"></i></div><div class="toast-content"><div class="toast-title">${title}</div><div class="toast-message">${message}</div></div><button class="toast-close"><i class="ri-close-line"></i></button>`; tc.appendChild(t); t.querySelector('.toast-close').addEventListener('click', () => t.remove()); setTimeout(() => t.remove(), 3000); }
     function requestNotificationPermission() { if ('Notification' in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission().then(p => { if(p === "granted") showToast('success', 'Notifications Enabled', 'You will receive notifications.'); else { showToast('info', 'Notifications Disabled'); document.getElementById('notifyToggle').checked = false; }}); } else if (Notification.permission === "denied"){ showToast('warning', 'Notifications Blocked', 'Please enable in browser settings.'); document.getElementById('notifyToggle').checked = false; } }
     function showBrowserNotification(title, message) { if ('Notification' in window && Notification.permission === "granted") new Notification(title, { body: message }); }
-    function resetTranscriptionUI() { 
-        generationInProgress = false; 
-        loadingOverlay.style.display = 'none'; 
-        progressContainer.classList.remove('active'); 
-        stopTypewriterAnimation(); 
-        updateTranscribeButtonText(); 
-        activeProcessingQueue = []; 
-        currentProcessingIndex = -1; 
-        isCancelled = false; 
+    function resetTranscriptionUI() {
+        generationInProgress = false;
+        loadingOverlay.style.display = 'none';
+        progressContainer.classList.remove('active');
+        stopTypewriterAnimation();
+        activeProcessingQueue = [];
+        currentProcessingIndex = -1;
+        isCancelled = false;
         showStatsLoading(false); // Ensure stats loading is reset
-    } // Also reset queue state
+        progressBar.style.width = "0%";
+        progressPercent.textContent = "0%";
+        progressMessage.textContent = "Processing...";
+        
+        // Reset form and update button
+        document.getElementById('localForm').reset();
+        const transcribeButton = document.getElementById("transcribeButton");
+        transcribeButton.disabled = false;
+        updateTranscribeButtonText();
+    }
     function updateProgress(percent, message) { progressBar.style.width = `${percent}%`; progressMessage.textContent = message || 'Processing...'; progressPercent.textContent = `${Math.round(percent)}%`; progressContainer.classList.toggle('active', percent > 0 && percent < 100); }
 
     // --- Model & Feature Handling ---
     function handleModelChange() {
+        // Note: This function is being replaced by the new handleModelSelection function
         const selectedModel = document.querySelector('input[name="model_option"]:checked').value;
-        apiKeySection.style.display = (selectedModel === 'whisper-1') ? 'block' : 'none';
+
+        // Check if the selected model is one of the OpenAI models
+        const isOpenAIModel = ['whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe'].includes(selectedModel);
+
+        // Show/hide API key sections
+        apiKeySection.style.display = isOpenAIModel ? 'block' : 'none'; // Shared OpenAI key section
         deepgramApiKeySection.style.display = (selectedModel === 'nova-3') ? 'block' : 'none';
         gladiaApiKeySection.style.display = (selectedModel === 'gladia') ? 'block' : 'none';
+        elevenlabsApiKeySection.style.display = (selectedModel === 'scribe-v1') ? 'block' : 'none';
         deepgramOptionsDiv.style.display = (selectedModel === 'nova-3') ? 'block' : 'none';
 
         // Load saved API keys
-        if (selectedModel === 'whisper-1') apiKeySection.querySelector('input').value = localStorage.getItem('openaiApiKey') || '';
+        if (isOpenAIModel) apiKeySection.querySelector('input').value = localStorage.getItem('openaiApiKey') || '';
         else if (selectedModel === 'nova-3') deepgramApiKeySection.querySelector('input').value = localStorage.getItem('deepgramApiKey') || '';
         else if (selectedModel === 'gladia') gladiaApiKeySection.querySelector('input').value = localStorage.getItem('gladiaApiKey') || '';
+        else if (selectedModel === 'scribe-v1') elevenlabsApiKeySection.querySelector('input').value = localStorage.getItem('elevenlabsApiKey') || '';
 
         // Update Model Info highlighting in sidebar - reset all headings first
         document.querySelectorAll('#modelInfoContent .sidebar-section').forEach(section => {
             section.classList.remove('active-model');
         });
-            
+
         // Find and highlight the selected model using data-model attribute
         const selectedHeader = document.querySelector(`#modelInfoContent .sidebar-section h3[data-model="${selectedModel}"]`);
         if (selectedHeader) {
@@ -2270,15 +2563,17 @@
             }
         } else {
              clearTranscriptDisplay(); resetTranscriptionStats(); // Clear if no file active
+             updateModelCompletionStatus(null); // Clear badges if no file active
         }
         updateTranscribeButtonText(); // Ensure button text is correct
     }
+
 
     function handleDeepgramFeatureChange(){
          updatePriceCalculator();
          // Check if Deepgram model is currently selected
          const isDeepgramSelected = document.querySelector('input[name="model_option"]:checked').value === 'nova-3';
-         
+
          // Show/hide feature hint messages based on model selection and feature toggles
          document.getElementById('summarizeHint').style.display = isDeepgramSelected && summarizeCheckbox.checked ? 'block' : 'none';
          document.getElementById('topicsHint').style.display = isDeepgramSelected && topicsCheckbox.checked ? 'block' : 'none';
@@ -2320,31 +2615,56 @@
     }
 
     function updateTranscribeButtonText() {
-        const selectedFiles = fileQueue.filter(file => file.selected !== false && !file.error); // Count only non-errored selected
+        const selectedFiles = fileQueue.filter(file => file.selected !== false && !file.error);
         const selectedCount = selectedFiles.length;
         const button = document.getElementById("transcribeButton");
 
         if (generationInProgress) {
             button.innerHTML = `<i class="ri-stop-circle-line"></i><span>Cancel</span>`;
-            button.disabled = false; // Always enable cancel
         } else {
-            let text = 'Transcribe';
-            if (selectedCount > 1) text = `Transcribe Selected (${selectedCount})`;
-            else if (selectedCount === 1) text = 'Transcribe';
+            let text = selectedCount > 0 ? (selectedCount > 1 ? `Transcribe Selected (${selectedCount})` : 'Transcribe') : 'Transcribe';
             button.innerHTML = `<i class="ri-draft-line"></i><span>${text}</span>`;
-            button.disabled = selectedCount === 0; // Disable if nothing valid selected
         }
     }
 
     // --- Price Calculation ---
     function updatePriceCalculator() {
-        const selectedModel = document.querySelector('input[name="model_option"]:checked').value;
+        // Get the price calculator element if not already cached
+        const priceCalculatorDiv = document.getElementById('priceCalculator');
+        if (!priceCalculatorDiv) {
+            console.error("Price calculator div not found!");
+            return;
+        }
+
+        const selectedModel = document.querySelector('input[name="model_option"]:checked')?.value;
+        if (!selectedModel) {
+            console.error("No model selected!");
+            return;
+        }
+
         const isSummarizeEnabled = selectedModel === 'nova-3' && summarizeCheckbox.checked;
         const isTopicsEnabled = selectedModel === 'nova-3' && topicsCheckbox.checked;
 
         let baseCostPerMinute = 0; let apiName = ''; let showCalculator = false;
         let totalEstimatedCost = 0; let summarizationCost = 0; let topicDetectionCost = 0; let baseApiCost = 0;
+
+        // Clear any existing attribution notice
+        const existingAttribution = document.querySelector('.attribution-notice');
+        if (existingAttribution) {
+            existingAttribution.remove();
+        }
         
+        // Add attribution notice for Scribe-v1 if selected
+        if (selectedModel === 'scribe-v1') {
+            const priceDetails = document.querySelector('.price-details');
+            const totalCostRow = document.querySelector('.total-cost-row');
+            if (priceDetails && totalCostRow) {
+                const attributionRow = document.createElement('div');
+                attributionRow.className = 'price-row attribution-notice';
+                priceDetails.insertBefore(attributionRow, totalCostRow);
+            }
+        }
+
         // Set the pricing documentation link based on the selected model
         const pricingDocLink = document.getElementById('pricingDocLink');
         if (selectedModel === 'whisper-1') { 
@@ -2353,6 +2673,18 @@
             showCalculator = true;
             pricingDocLink.href = 'https://platform.openai.com/docs/pricing#transcription-and-speech-generation';
         }
+        else if (selectedModel === 'gpt-4o-mini-transcribe') {
+            baseCostPerMinute = 0.003;
+            apiName = 'GPT-4o Mini';
+            showCalculator = true;
+            pricingDocLink.href = 'https://platform.openai.com/docs/pricing#audio-models';
+        }
+        else if (selectedModel === 'gpt-4o-transcribe') {
+            baseCostPerMinute = 0.006;
+            apiName = 'GPT-4o';
+            showCalculator = true;
+            pricingDocLink.href = 'https://platform.openai.com/docs/pricing#audio-models';
+        }
         else if (selectedModel === 'nova-3') { 
             baseCostPerMinute = 0.0052; 
             apiName = 'Nova-3'; 
@@ -2360,13 +2692,26 @@
             pricingDocLink.href = 'https://deepgram.com/pricing';
         }
         else if (selectedModel === 'gladia') { 
+            apiName = 'Gladia';
             showCalculator = true;
             pricingDocLink.href = 'https://docs.gladia.io/chapters/limits-and-specifications/concurrency';
         }
+        else if (selectedModel === 'scribe-v1') {
+            apiName = 'Scribe v1';
+            showCalculator = true;
+            pricingDocLink.href = 'https://elevenlabs.io/app/subscription';
+        }
 
-        priceCalculatorDiv.style.display = showCalculator ? 'block' : 'none';
+        // Force the display property based on showCalculator
+        if (priceCalculatorDiv) {
+            priceCalculatorDiv.style.display = showCalculator ? 'block' : 'none';
+            console.log("Price calculator display:", priceCalculatorDiv.style.display, "for model:", selectedModel);
+        } else {
+            console.error("Price calculator div not found!");
+        }
+
         summarizationCostRow.style.display = 'none'; topicDetectionCostRow.style.display = 'none'; // Hide feature costs by default
-
+        
         if (showCalculator && currentFileDuration > 0) {
             const durationInMinutes = currentFileDuration / 60;
             
@@ -2378,7 +2723,18 @@
                 // Calculate file duration in hours (with 2 decimal places)
                 const durationInHours = (durationInMinutes / 60).toFixed(2);
                 estimatedCostValue.textContent = `${durationInHours} hours`;
-            } else {
+            } 
+            else if (selectedModel === 'scribe-v1') {
+                // For Scribe-v1, show credit usage (0.57 credits/second)
+                fileDurationValue.textContent = formatDuration(currentFileDuration);
+                apiPricingLabel.textContent = 'Scribe v1 Free Plan:';
+                apiPricingValue.textContent = '10,000 credits';
+                
+                // Calculate estimated credits (0.57 credits/second)
+                const estimatedCredits = Math.ceil(currentFileDuration * 0.57);
+                estimatedCostValue.textContent = `${estimatedCredits} credits`;
+            }
+            else {
                 // Regular cost calculation for other models
                 baseApiCost = durationInMinutes * baseCostPerMinute; 
                 totalEstimatedCost += baseApiCost;
@@ -2424,6 +2780,26 @@
                 apiPricingLabel.textContent = `Gladia Free Plan:`;
                 apiPricingValue.textContent = '10 hours';
                 estimatedCostValue.textContent = '0.00 hours';
+            } else if (selectedModel === 'scribe-v1') {
+                apiPricingLabel.textContent = `Scribe v1:`;
+                apiPricingValue.textContent = '~0.57 credits/second';
+                estimatedCostValue.textContent = formatDuration(currentFileDuration);
+            } else if (selectedModel === 'whisper-1') {
+                apiPricingLabel.textContent = `Whisper-1:`;
+                apiPricingValue.textContent = '$0.006 / min';
+                estimatedCostValue.textContent = '$0.00';
+            } else if (selectedModel === 'gpt-4o-transcribe') {
+                apiPricingLabel.textContent = `GPT-4o:`;
+                apiPricingValue.textContent = '$0.006 / min';
+                estimatedCostValue.textContent = '$0.00';
+            } else if (selectedModel === 'gpt-4o-mini-transcribe') {
+                apiPricingLabel.textContent = `GPT-4o Mini:`;
+                apiPricingValue.textContent = '$0.003 / min';
+                estimatedCostValue.textContent = '$0.00';
+            } else if (selectedModel === 'nova-3') {
+                apiPricingLabel.textContent = `Nova-3:`;
+                apiPricingValue.textContent = '$0.0052 / min';
+                estimatedCostValue.textContent = '$0.00';
             } else {
                 apiPricingLabel.textContent = `${apiName}:`;
                 apiPricingValue.textContent = 'N/A';
@@ -2444,7 +2820,18 @@
                 }
             }
         }
+
+        // Ensure the calculator actually shows up
+        if (showCalculator) {
+            // Force display to block and ensure it's visible
+            priceCalculatorDiv.style.display = 'block';
+            priceCalculatorDiv.style.visibility = 'visible';
+            console.log("Price calculator should now be visible:", selectedModel);
+        } else {
+            priceCalculatorDiv.style.display = 'none';
+        }
     }
+    
     function formatDuration(seconds) { if (isNaN(seconds) || seconds <= 0) return "0:00"; const m = Math.floor(seconds / 60); const s = Math.floor(seconds % 60); return `${m}:${s.toString().padStart(2, '0')}`; }
 
     // --- Formatting & Misc ---
@@ -2588,6 +2975,71 @@
             mainContent.style.display = 'none';
             modelInfoContent.style.display = 'block';
         }
+    }
+    
+    // --- Model Selection ---
+    function handleModelSelection() {
+        const selectedModel = document.querySelector('input[name="model_option"]:checked').value;
+        console.log(`Selected model: ${selectedModel}`);
+        
+        // Show/hide API key sections based on model
+        const isOpenAIModel = ['whisper-1', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'].includes(selectedModel);
+        const isDeepgramModel = selectedModel === 'nova-3';
+        const isGladiaModel = selectedModel === 'gladia';
+        const isElevenLabsModel = selectedModel === 'scribe-v1';
+        const isGPT4oModel = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'].includes(selectedModel);
+        
+        // Handle OpenAI section and prompt field
+        document.getElementById('openaiApiKeySection').style.display = isOpenAIModel ? 'block' : 'none';
+        document.getElementById('gpt4o-prompt-section').style.display = isGPT4oModel ? 'block' : 'none';
+        
+        // Handle other API key sections
+        document.getElementById('deepgramApiKeySection').style.display = isDeepgramModel ? 'block' : 'none';
+        document.getElementById('gladiaApiKeySection').style.display = isGladiaModel ? 'block' : 'none';
+        document.getElementById('elevenlabsApiKeySection').style.display = isElevenLabsModel ? 'block' : 'none';
+        
+        // Handle Deepgram AI feature options
+        deepgramOptionsDiv.style.display = isDeepgramModel ? 'block' : 'none';
+        
+        updatePriceCalculator();
+
+        if (currentActiveFile) {
+            updateModelCompletionStatus(currentActiveFile); // Update completion badges first
+
+            // Check if saved results exist for the *newly selected model* and display them
+            if (savedTranscriptionsByFile[currentActiveFile]?.[selectedModel]) {
+                 console.log(`Switching view to saved results for ${selectedModel} on file ${currentActiveFile}.`);
+                 // Copy the saved result for this model into the active display cache
+                 fileResults[currentActiveFile] = savedTranscriptionsByFile[currentActiveFile][selectedModel];
+                 showFileResult(currentActiveFile);
+                 // Update stats for the loaded result
+                 updateTranscriptionStats(fileResults[currentActiveFile].default_transcript, fileResults[currentActiveFile].elapsed_time);
+            } else {
+                 // Clear display if no results saved for this model/file combo
+                 console.log(`No saved results for ${selectedModel}, clearing transcript display.`);
+                 clearTranscriptDisplay(); resetTranscriptionStats();
+            }
+        } else {
+             clearTranscriptDisplay(); resetTranscriptionStats(); // Clear if no file active
+             updateModelCompletionStatus(null); // Clear badges if no file active
+        }
+
+        // Update Model Info highlighting in sidebar - reset all headings first
+        document.querySelectorAll('#modelInfoContent .sidebar-section').forEach(section => {
+            section.classList.remove('active-model');
+        });
+        // Find and highlight the selected model using data-model attribute
+        const selectedHeader = document.querySelector(`#modelInfoContent .sidebar-section h3[data-model="${selectedModel}"]`);
+        if (selectedHeader) {
+            // Get the parent section and add the active class to it
+            const parentSection = selectedHeader.closest('.sidebar-section');
+            if (parentSection) {
+                parentSection.classList.add('active-model');
+            }
+        }
+
+        updatePriceCalculator();
+        updateTranscribeButtonText(); // Ensure button text is correct after model change
     }
     
   </script>
