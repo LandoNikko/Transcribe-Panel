@@ -2,7 +2,7 @@
 
 Kaira Transcribe Panel is a web app for local and cloud transcription (STT: speech-to-text) models. It's a privacy-conscious tool for transcribing audio/video files using OpenAI's open-source Whisper models, as well as offering cloud options (OpenAI, Deepgram, Gladia) where you use your own API key. Compare each model's output speed, quality and pricing. Think of this like Automatic1111, but made for transcriptions.
 
-![Screenshot Placeholder - Add one here]
+![Kaira Screenshot](https://github.com/LandoNikko/Kaira-Transcribe-Panel/blob/main/Kaira_Homescreen.jpg?raw=true)
 
 ---
 
@@ -15,8 +15,6 @@ Kaira Transcribe Panel is a web app for local and cloud transcription (STT: spee
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License & Credits](#license--credits)
-
----
 
 ## Features Overview
 
@@ -33,8 +31,6 @@ Kaira Transcribe Panel is a web app for local and cloud transcription (STT: spee
   - Add/remove and transcribe multiple files.
 - **Price Calculator:** Estimates API costs for cloud models.
 - **Convenience:** Copy/download results, notifications, word/character stats.
-
----
 
 ## Installation
 
@@ -92,8 +88,6 @@ Kaira_Transcribe_Panel/
 ├── requirements.txt        # Python dependencies
 ```
 
----
-
 ## Launching the App
 
 ### 1. Run
@@ -105,8 +99,6 @@ python Launch_Kaira.py
 ### 2. Open the Web App
 
 Visit `http://localhost:5000` in your browser.
-
----
 
 ## Cloud Models
 
@@ -122,10 +114,9 @@ To transcribe with **Whisper-1**, **Deepgram**, or **Gladia**:
 - [Deepgram](https://console.deepgram.com/signup)
 - [Gladia](https://gladia.io)
 
----
-
 ## Roadmap
 
+- Better documentation
 - Translation -tab with different options (API provider's offers and LLM workflow integration).
 - New transcription models, local and cloud.
 - Explore in-browser-only Whisper execution (e.g., ONNX, Transformers.js).
@@ -133,7 +124,6 @@ To transcribe with **Whisper-1**, **Deepgram**, or **Gladia**:
 - Eliminate the external CDN requirement to bundle WaveSurfer.js locally (so you don't need an internet connection to see the audio player).
 - Modular plugin-style cloud support (like A1111 extensions) to keep local version minimal by default.
 
----
 
 ## Contributing
 
