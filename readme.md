@@ -2,7 +2,7 @@
 
 Kaira Transcribe Panel is a web app for local and cloud transcription (STT: speech-to-text) models. It's a privacy-conscious tool for transcribing audio/video files using OpenAI's open-source Whisper models, as well as offering cloud options (OpenAI, Deepgram, Gladia) where you use your own API key. Compare each model's output speed, quality and pricing. Think of this like Automatic1111, but made for transcriptions.
 
-![Kaira Screenshot](https://github.com/LandoNikko/Kaira-Transcribe-Panel/blob/main/Kaira_Homescreen.jpg?raw=true)
+![Image](https://github.com/user-attachments/assets/25cf5827-1fed-4d17-8a44-f09f64f9a64e)
 
 ---
 
@@ -22,8 +22,11 @@ Kaira Transcribe Panel is a web app for local and cloud transcription (STT: spee
   - Tiny, Base, Small, Medium, Turbo and Large.
 - **Cloud Models (BYOK — Bring Your Own Key):**
   - OpenAI Whisper-1
+  - OpenAI gpt-40-mini-transcribe
+  - OpenAI gpt-4o-transcribe
   - Deepgram Nova-3 *(Summarization & Topic Detection supported)*
   - Gladia *(English-only for now)*
+  - Elevenlabs Scribe v1
 - **Transcript Outputs:** Paragraphs, Segments, SRT, VTT and TSV.
 - **Media Sync:** Built-in audio/video player with waveform, real-time paragraph highlighting synced to playback and click-to-seek transcript.
 - **Personalization:** From light mode to dark modes and cute (E Ink, Nova, Minty, Toffee).
