@@ -13,6 +13,8 @@ import re
 import mutagen  # For audio duration, especially for GPT-4o fallback
 
 app = Flask(__name__, template_folder=".")
+# Fail-fast on oversized uploads to save IO/CPU
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1 GB
 app.config['SECRET_KEY'] = 'secret!'
 TEMP_FOLDER = 'temp'
 if not os.path.exists(TEMP_FOLDER):
@@ -21,6 +23,19 @@ app.config['TEMP_FOLDER'] = TEMP_FOLDER
 
 # Configure SocketIO with longer timeouts
 socketio = SocketIO(app, async_mode='threading', ping_timeout=60, ping_interval=25, cors_allowed_origins="*")
+
+from flask_compress import Compress
+Compress(app)
+
+# Globally reuse HTTP connections to reduce TLS/TCP overhead
+http = requests.Session()
+
+# Cap torch CPU threads to avoid oversubscription on busy hosts
+try:
+    if 'OMP_NUM_THREADS' not in os.environ:
+        torch.set_num_threads(max(1, min(4, os.cpu_count() or 1)))
+except Exception:
+    pass
 
 # Global structures
 transcriptions = {}  # { job_id: { model_option: { "srt_text":..., etc. } } }
@@ -399,7 +414,7 @@ def extract_full_text_from_result(result):
 ######################################################
 @app.route('/', methods=['GET'])
 def index():
-    return render_template('Kaira_Transcribe_Panel.html')
+    return render_template('index.html')
 
 ######################################################
 # Background tasks for each STT approach
@@ -641,9 +656,9 @@ def deepgram_ai_features(api_key, full_text, do_summarize=False, do_topics=False
     if do_summarize:
         summary_params = dict(params, summarize="true")
         try:
-            r = requests.post("https://api.deepgram.com/v1/read",
-                              params=summary_params, headers=headers,
-                              json=data_payload)
+            r = http.post("https://api.deepgram.com/v1/read",
+                          params=summary_params, headers=headers,
+                          json=data_payload, timeout=30)
             if r.status_code == 200:
                 jr = r.json()
                 summary_text = jr["results"]["summary"].get("text", None)
@@ -654,9 +669,9 @@ def deepgram_ai_features(api_key, full_text, do_summarize=False, do_topics=False
     if do_topics:
         topics_params = dict(params, topics="true")
         try:
-            r = requests.post("https://api.deepgram.com/v1/read",
-                              params=topics_params, headers=headers,
-                              json=data_payload)
+            r = http.post("https://api.deepgram.com/v1/read",
+                          params=topics_params, headers=headers,
+                          json=data_payload, timeout=30)
             if r.status_code == 200:
                 jr = r.json()
                 topics_data = jr["results"].get("topics", None)
@@ -688,8 +703,8 @@ def deepgram_transcription(job_id, filepath, api_key, summarize_enabled=False, t
         content_type = mime_types_map.get(file_ext, "application/octet-stream")
         headers = {"Authorization": f"Token {api_key}", "Content-Type": content_type}
 
-        with open(filepath, "rb") as f:
-            file_content = f.read()
+        # Stream upload directly from disk (avoid loading whole file into memory)
+        # Note: keep the file open only during the request
 
         params = {
             "model": model_name,
@@ -701,8 +716,14 @@ def deepgram_transcription(job_id, filepath, api_key, summarize_enabled=False, t
             "smart_format": "true"
         }
 
-        response = requests.post("https://api.deepgram.com/v1/listen",
-                                 params=params, headers=headers, data=file_content)
+        with open(filepath, 'rb') as f:
+            response = http.post(
+                "https://api.deepgram.com/v1/listen",
+                params=params,
+                headers=headers,
+                data=f,
+                timeout=120
+            )
         if response.status_code != 200:
             raise Exception(f"Deepgram error: {response.status_code}, {response.text}")
 
@@ -769,8 +790,8 @@ def gladia_transcription(job_id, filepath, api_key):
         # Step 1) Upload
         with open(filepath, "rb") as audio_file:
             files = {"audio": (filename, audio_file, mime_type)}
-            r = requests.post("https://api.gladia.io/v2/upload",
-                              headers=upload_headers, files=files)
+            r = http.post("https://api.gladia.io/v2/upload",
+                          headers=upload_headers, files=files, timeout=120)
             r.raise_for_status()
             upload_result = r.json()
             audio_url = upload_result.get("audio_url")
@@ -809,8 +830,8 @@ def gladia_transcription(job_id, filepath, api_key):
             "elapsed": int(time.time() - start_time),
             "remaining": 0
         }, room=job_id)
-        tresp = requests.post("https://api.gladia.io/v2/pre-recorded",
-                              headers=transcription_headers, json=transcription_data)
+        tresp = http.post("https://api.gladia.io/v2/pre-recorded",
+                          headers=transcription_headers, json=transcription_data, timeout=30)
         tresp.raise_for_status()
         tr_json = tresp.json()
         transcription_id = tr_json.get("id")
@@ -820,19 +841,21 @@ def gladia_transcription(job_id, filepath, api_key):
 
         # Step 3) Poll for results
         max_retries = 60
-        polling_interval = 10
+        polling_interval = 3
         final_result = None
         for attempt in range(max_retries):
             if cancellations.get(job_id, False):
                 return
-            poll_resp = requests.get(result_url, headers={"x-gladia-key": api_key})
+            poll_resp = http.get(result_url, headers={"x-gladia-key": api_key}, timeout=30)
             if poll_resp.status_code == 200:
                 prj = poll_resp.json()
                 status = prj.get("status")
                 if status == "done":
                     final_result = prj
                     break
-            time.sleep(polling_interval)
+            # Exponential backoff up to 15s
+            time.sleep(min(15, polling_interval))
+            polling_interval = min(15, polling_interval * 2)
 
         if not final_result or final_result.get("status") != "done":
             raise Exception("Gladia transcription timed out or failed.")
@@ -973,18 +996,17 @@ def elevenlabs_transcription(job_id, filepath, api_key, language_code=None):
             "remaining": 0
         }, room=job_id)
 
-        headers = {"xi-api-key": api_key}
-        data = {
-            "model_id": "eleven_scribe_v1",
-            "diarize": "true",
-            "tag_audio_events": "true"
-        }
-        if language_code:
-            data["language_code"] = language_code
+        try:
+            from elevenlabs import ElevenLabs
+        except ImportError:
+            raise Exception("ElevenLabs SDK not installed. Run: pip install elevenlabs")
 
-        filename = os.path.basename(filepath)
-        file_ext = os.path.splitext(filename)[1].lower()
-        mime_type = mime_types_map.get(file_ext, "application/octet-stream")
+        # Validate API key format
+        if not api_key or len(api_key.strip()) < 10:
+            raise Exception("ElevenLabs API key is missing or too short")
+        
+        print(f"ElevenLabs API key length: {len(api_key)}")
+        client = ElevenLabs(api_key=api_key.strip())
 
         socketio.emit("progress_update", {
             "job_id": job_id,
@@ -994,20 +1016,32 @@ def elevenlabs_transcription(job_id, filepath, api_key, language_code=None):
             "remaining": 0
         }, room=job_id)
 
-        with open(filepath, "rb") as f:
-            files = {"file": (filename, f, mime_type)}
-            resp = requests.post("https://api.elevenlabs.io/v1/speech-to-text",
-                                 headers=headers, data=data, files=files)
-        if resp.status_code != 200:
-            error_msg = ""
+        with open(filepath, "rb") as audio_file:
             try:
-                jerr = resp.json()
-                error_msg = jerr.get("detail", resp.text)
-            except:
-                error_msg = resp.text
-            raise Exception(f"ElevenLabs error: {resp.status_code}, {error_msg}")
+                # Use the exact method from ElevenLabs documentation
+                # Only pass language_code if it's not None/empty
+                params = {
+                    "file": audio_file,
+                    "model_id": "scribe_v1",
+                    "tag_audio_events": True,
+                    "diarize": True
+                }
+                
+                # Only add language_code if it's provided and not empty
+                if language_code and language_code.strip():
+                    params["language_code"] = language_code.strip()
+                
+                result = client.speech_to_text.convert(**params)
+            except Exception as api_error:
+                print(f"ElevenLabs API error details: {api_error}")
+                # Check if it's an authentication error
+                if "invalid_api_key" in str(api_error).lower() or "401" in str(api_error):
+                    raise Exception("Invalid ElevenLabs API key. Please check your API key in the settings.")
+                raise Exception(f"ElevenLabs API error: {str(api_error)}")
 
-        result = resp.json()
+        if not isinstance(result, dict):
+            result = result.model_dump() if hasattr(result, 'model_dump') else dict(result)
+
         detected_language = result.get("language_code", "auto-detected")
         segments = extract_segments_from_elevenlabs_response(result)
         if not segments:
@@ -1080,7 +1114,9 @@ def fast_transcription(job_id, file_path, model_option):
         if torch.cuda.is_available():
             options["fp16"] = True
 
-        result = model.transcribe(file_path, **options)
+        # Reduce Python overhead and enable better kernels where possible
+        with torch.inference_mode():
+            result = model.transcribe(file_path, **options)
         segments = result.get("segments", [])
         detected_language = result.get("language", "auto-detected")
 
