@@ -996,17 +996,9 @@ def elevenlabs_transcription(job_id, filepath, api_key, language_code=None):
             "remaining": 0
         }, room=job_id)
 
-        try:
-            from elevenlabs import ElevenLabs
-        except ImportError:
-            raise Exception("ElevenLabs SDK not installed. Run: pip install elevenlabs")
-
         # Validate API key format
         if not api_key or len(api_key.strip()) < 10:
             raise Exception("ElevenLabs API key is missing or too short")
-        
-        print(f"ElevenLabs API key length: {len(api_key)}")
-        client = ElevenLabs(api_key=api_key.strip())
 
         socketio.emit("progress_update", {
             "job_id": job_id,
@@ -1016,31 +1008,59 @@ def elevenlabs_transcription(job_id, filepath, api_key, language_code=None):
             "remaining": 0
         }, room=job_id)
 
-        with open(filepath, "rb") as audio_file:
-            try:
-                # Use the exact method from ElevenLabs documentation
-                # Only pass language_code if it's not None/empty
-                params = {
-                    "file": audio_file,
-                    "model_id": "scribe_v1",
-                    "tag_audio_events": True,
-                    "diarize": True
+        # Use direct HTTP API call (SDK has model_id mapping issues)
+        # This matches exactly how the frontend direct API call works
+        try:
+            with open(filepath, "rb") as audio_file:
+                # Prepare form data exactly like frontend
+                files = {'file': audio_file}
+                data = {
+                    'model_id': 'scribe_v1',
+                    'output_format': 'json',
+                    'response_format': 'verbose_json'
                 }
                 
-                # Only add language_code if it's provided and not empty
+                # Only add language_code if provided
                 if language_code and language_code.strip():
-                    params["language_code"] = language_code.strip()
+                    data['language_code'] = language_code.strip()
                 
-                result = client.speech_to_text.convert(**params)
-            except Exception as api_error:
-                print(f"ElevenLabs API error details: {api_error}")
-                # Check if it's an authentication error
-                if "invalid_api_key" in str(api_error).lower() or "401" in str(api_error):
-                    raise Exception("Invalid ElevenLabs API key. Please check your API key in the settings.")
-                raise Exception(f"ElevenLabs API error: {str(api_error)}")
-
-        if not isinstance(result, dict):
-            result = result.model_dump() if hasattr(result, 'model_dump') else dict(result)
+                headers = {'xi-api-key': api_key.strip()}
+                
+                # Use fresh requests call instead of global session
+                response = requests.post(
+                    'https://api.elevenlabs.io/v1/speech-to-text',
+                    headers=headers,
+                    files=files,
+                    data=data,
+                    timeout=300
+                )
+                
+                if not response.ok:
+                    error_text = response.text
+                    
+                    if response.status_code == 401:
+                        raise Exception("Invalid ElevenLabs API key. Please check your API key in the settings.")
+                    elif response.status_code == 400:
+                        # Parse the error for better messaging
+                        try:
+                            error_json = response.json()
+                            error_msg = error_json.get('message', error_text)
+                        except:
+                            error_msg = error_text
+                        raise Exception(f"ElevenLabs API error: {error_msg}")
+                    else:
+                        raise Exception(f"ElevenLabs API error: {response.status_code} - {error_text}")
+                
+                result = response.json()
+                
+        except Exception as api_error:
+            error_msg = str(api_error)
+            print(f"ElevenLabs API error details: {error_msg}")
+            
+            if "invalid_api_key" in error_msg.lower() or "401" in error_msg:
+                raise Exception("Invalid ElevenLabs API key. Please check your API key in the settings.")
+            else:
+                raise Exception(f"ElevenLabs API error: {error_msg}")
 
         detected_language = result.get("language_code", "auto-detected")
         segments = extract_segments_from_elevenlabs_response(result)

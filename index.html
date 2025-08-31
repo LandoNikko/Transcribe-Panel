@@ -19,7 +19,6 @@
       */
 
 
-      /* E Ink theme colors */
       --primary-color: #333333;
       --primary-dark: #1a1a1a;
       --primary-bg: #f2f2f2;
@@ -42,7 +41,6 @@
       --sidebar-width: 260px;
     }
 
-    /* Nova theme colors */
     .nova-theme {
       --primary-color: #10b981;
       --primary-dark: #059669;
@@ -61,7 +59,6 @@
       --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
-    /* Minty theme colors */
     .minty-theme {
       --primary-color: #ff6f61;
       --primary-dark: #ff6f61;
@@ -80,7 +77,6 @@
       --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
     }
 
-        /* Toffee theme colors */
         .Toffee-theme {
       --primary-color: #c98900;
       --primary-dark: #c59734;
@@ -808,7 +804,7 @@
                       <p style="margin: 0; line-height: 1.4;">
                         Local models require Python backend server to be running. See the <a href="https://github.com/LandoNikko/Kaira-Transcribe-Panel" target="_blank" style="color: var(--primary-color); text-decoration: none;">GitHub repository</a> for setup instructions.
                       </p>
-                    </div>
+                      </div>
                   </div>
                   
                   <!-- Cloud Models Content -->
@@ -885,9 +881,9 @@
                     <p class="small-note">Use a secure password manager to store your API key. Avoid saving it in the browser unless you understand the risks.</p>
                   </div>
                 </div>
-                                  <div class="api-key-section" id="gladiaApiKeySection" >
-                    <div class="options-title"><i class="ri-key-2-line"></i><h3>Gladia API Key</h3></div>
-                    <div class="api-key-input"><input type="password" id="gladia_api_key" name="gladia_api_key" placeholder="Enter your Gladia API key" class="input"><button type="button" class="btn btn-secondary" id="showGladiaApiKey"><i class="ri-eye-line"></i></button><button type="button" class="btn btn-secondary" id="testGladiaKey" style="margin-left: 5px;">Test Key</button></div>
+                <div class="api-key-section" id="gladiaApiKeySection" >
+                  <div class="options-title"><i class="ri-key-2-line"></i><h3>Gladia API Key</h3></div>
+                  <div class="api-key-input"><input type="password" id="gladia_api_key" name="gladia_api_key" placeholder="Enter your Gladia API key" class="input"><button type="button" class="btn btn-secondary" id="showGladiaApiKey"><i class="ri-eye-line"></i></button></div>
                    <div class="api-key-header">
                      <h4>How do I get a Gladia API key?</h4>
                      <button type="button" class="api-key-toggle"><i class="ri-arrow-down-s-line"></i></button>
@@ -1135,53 +1131,7 @@
       document.getElementById('showGladiaApiKey').addEventListener('click', function() {
         togglePasswordVisibility('gladia_api_key', this);
       });
-      document.getElementById('testGladiaKey').addEventListener('click', async function() {
-        const rawApiKey = document.getElementById('gladia_api_key').value;
-        const apiKey = rawApiKey.trim();
-        
-        if (!apiKey) {
-          alert('Please enter your Gladia API key first');
-          return;
-        }
-        
-        console.log('Testing Gladia API key directly...');
-        this.disabled = true;
-        this.textContent = 'Testing...';
-        
-        try {
-          // Create a small test audio file
-          const testBlob = new Blob([new ArrayBuffer(1024)], { type: 'audio/wav' });
-          const testFile = new File([testBlob], 'test.wav', { type: 'audio/wav' });
-          
-          const formData = new FormData();
-          formData.append('audio', testFile);
-          
-          const response = await fetch('https://api.gladia.io/v2/upload', {
-            method: 'POST',
-            headers: {
-              'x-gladia-key': apiKey
-            },
-            body: formData
-          });
-          
-          if (response.status === 401) {
-            const errorText = await response.text();
-            alert('❌ API Key Invalid: ' + errorText);
-          } else if (response.ok) {
-            const result = await response.json();
-            alert('✅ API Key Valid: Direct API call successful!');
-          } else {
-            const errorText = await response.text();
-            alert(`⚠️ Unexpected response: ${response.status} - ${errorText}`);
-          }
-          
-        } catch (error) {
-          alert('❌ Test failed: ' + error.message);
-        } finally {
-          this.disabled = false;
-          this.textContent = 'Test Key';
-        }
-      });
+
       document.getElementById('showElevenLabsApiKey').addEventListener('click', function() {
         togglePasswordVisibility('elevenlabs_api_key', this);
       });
@@ -1377,7 +1327,7 @@
 
         updateFileQueue(); // Update UI list
 
-        // Select and preview the last successfully added file
+
         if (lastAddedFileId) {
             currentActiveFile = lastAddedFileId;
              const lastFile = fileQueue.find(f => f.id === lastAddedFileId);
@@ -1391,26 +1341,26 @@
         }
 
         clearQueueBtn.disabled = fileQueue.length === 0;
-        // Only show toast if some files were actually added
+
         if(filesAddedCount > 0) showToast('success', 'Files Added', `Added ${filesAddedCount} file(s).`);
         updateTranscribeButtonText();
     }
 
     // --- Tab Management ---
     function switchModelTab(tabName) {
-      // Update tab buttons
+
       document.querySelectorAll('.model-tab-button').forEach(btn => {
         btn.classList.remove('active');
       });
       document.getElementById(tabName + 'TabButton').classList.add('active');
       
-      // Update tab content
+
       document.querySelectorAll('.model-tab-content').forEach(content => {
         content.classList.remove('active');
       });
       document.getElementById(tabName + 'TabContent').classList.add('active');
       
-      // Update API key sections visibility based on current tab (without recursion)
+
       updateApiSectionsVisibility();
     }
 
@@ -1425,22 +1375,22 @@
       const isElevenLabsModel = selectedModel === 'scribe-v1';
       const isGPT4oModel = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'].includes(selectedModel);
       
-      // Check if we're currently on the local tab
+
       const isOnLocalTab = document.getElementById('localTabButton').classList.contains('active');
       
       // Only show API key sections when on cloud tab and using cloud models
       const showApiSections = !isOnLocalTab;
       
-      // Handle OpenAI section and prompt field
+
       document.getElementById('openaiApiKeySection').style.display = (isOpenAIModel && showApiSections) ? 'block' : 'none';
       document.getElementById('gpt4o-prompt-section').style.display = (isGPT4oModel && showApiSections) ? 'block' : 'none';
       
-      // Handle other API key sections
+
       document.getElementById('deepgramApiKeySection').style.display = (isDeepgramModel && showApiSections) ? 'block' : 'none';
       document.getElementById('gladiaApiKeySection').style.display = (isGladiaModel && showApiSections) ? 'block' : 'none';
       document.getElementById('elevenlabsApiKeySection').style.display = (isElevenLabsModel && showApiSections) ? 'block' : 'none';
       
-      // Handle Deepgram AI feature options (only show if Python backend is available)
+
       const deepgramOptionsDiv = document.getElementById('deepgramOptions');
       if (deepgramOptionsDiv) {
         isPythonBackendAvailable().then(pythonAvailable => {
@@ -1448,7 +1398,7 @@
         });
       }
       
-      // Handle price calculator visibility
+
       const priceCalculatorDiv = document.getElementById('priceCalculator');
       if (priceCalculatorDiv) {
         priceCalculatorDiv.style.display = showApiSections ? 'block' : 'none';
@@ -1565,7 +1515,7 @@
           if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
             const currentFile = activeProcessingQueue[currentProcessingIndex];
             if (currentFile && currentFile.id) { // Check if currentFile and its id exist
-              console.log(`Processing completion for file: ${currentFile.name}, model: ${data.model_option}`);
+      
               // Store results (both current view and persistent)
               const resultData = {
                 fileName: currentFile.name, model: data.model_option, task: "transcribe",
@@ -1720,6 +1670,11 @@
                 checkboxBtn.onclick = function(e) {
                     e.stopPropagation();
                     file.selected = !file.selected;
+                    
+                    if (file.selected && file.error) {
+                        delete file.error;
+                    }
+                    
                     updateFileQueue();
                     updateTranscribeButtonText();
                 };
@@ -1911,7 +1866,12 @@
     }
     function selectAllFiles() {
         const allSelected = fileQueue.every(file => file.selected !== false);
-        fileQueue.forEach(file => file.selected = !allSelected);
+        fileQueue.forEach(file => {
+            file.selected = !allSelected;
+            if (file.selected && file.error) {
+                delete file.error;
+            }
+        });
         updateFileQueue(); updateTranscribeButtonText();
     }
 
@@ -2061,9 +2021,7 @@
       }
       
       const result = await response.json();
-      
-      // Since the backend handles this asynchronously, we need to simulate
-      // the response format that the frontend expects
+
       return {
         status: 'done',
         result: {
@@ -2085,7 +2043,6 @@
       // Add small delay to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Step 1: Upload the file
       const uploadFormData = new FormData();
       uploadFormData.append('audio', file, file.name);
       
@@ -2126,8 +2083,6 @@
 
       const uploadResult = await uploadResponse.json();
       const audioUrl = uploadResult.audio_url;
-
-      // Step 2: Start transcription
 
       const transcribeResponse = await fetch('https://api.gladia.io/v2/pre-recorded', {
         method: 'POST',
@@ -2174,7 +2129,6 @@
       const transcribeResult = await transcribeResponse.json();
       const resultUrl = transcribeResult.result_url;
 
-      // Step 3: Poll for results
       let pollAttempts = 0;
       const maxAttempts = 60; // 5 minutes max
       let delay = 5000; // Start with 5 second delay
@@ -2258,7 +2212,7 @@
           language = result.prediction?.language || "auto-detected";
         } else if (selectedModel === 'scribe-v1') {
           // ElevenLabs format
-          console.log('ElevenLabs response:', result);
+
           segments = extractSegmentsFromElevenLabsResponse(result);
           language = "auto-detected";
         }
@@ -2324,39 +2278,139 @@
 
     function extractSegmentsFromDeepgramResponse(result) {
       const segments = [];
-      if (result?.results?.utterances) {
-        result.results.utterances.forEach(utt => {
+      if (!result || !result.results) {
+        return segments;
+      }
+
+      const resultsData = result.results;
+      
+      // Prefer utterances (matches backend logic)
+      if (resultsData.utterances && resultsData.utterances.length > 0) {
+        resultsData.utterances.forEach(utt => {
           segments.push({
             start: utt.start || 0,
             end: utt.end || 0,
-            text: utt.transcript || ""
+            text: (utt.transcript || "").trim()
           });
         });
+        return segments;
       }
+
+      // Fallback to channels + paragraphs + words (matches backend)
+      if (resultsData.channels && resultsData.channels.length > 0) {
+        const channel = resultsData.channels[0];
+        if (channel.alternatives && channel.alternatives.length > 0) {
+          const alt = channel.alternatives[0];
+          
+          // First try paragraphs if available
+          if (alt.paragraphs && alt.paragraphs.paragraphs) {
+            alt.paragraphs.paragraphs.forEach(para => {
+              segments.push({
+                start: para.start || 0,
+                end: para.end || 0,
+                text: (para.text || "").trim()
+              });
+            });
+            return segments;
+          }
+          
+          // Then try words as a last resort
+          if (alt.words && alt.words.length > 0) {
+            let currentSegment = null;
+            const maxWordsPerSegment = 20;
+            const maxGapSeconds = 2.0;
+            
+            alt.words.forEach(word => {
+              const text = (word.word || "").trim();
+              const start = word.start;
+              const end = word.end;
+              
+              if (!text || start === undefined || end === undefined) return;
+              
+              let startNew = false;
+              if (!currentSegment) {
+                startNew = true;
+              } else {
+                const gap = start - currentSegment.end;
+                const prevEndsSentence = currentSegment.text.endsWith('.') || 
+                                       currentSegment.text.endsWith('!') || 
+                                       currentSegment.text.endsWith('?');
+                if (gap > maxGapSeconds || 
+                    currentSegment.wordsInSegment >= maxWordsPerSegment || 
+                    prevEndsSentence) {
+                  startNew = true;
+                }
+              }
+              
+              if (startNew && currentSegment) {
+                currentSegment.text = currentSegment.text.trim();
+                if (currentSegment.text) {
+                  segments.push({
+                    start: currentSegment.start,
+                    end: currentSegment.end,
+                    text: currentSegment.text
+                  });
+                }
+                currentSegment = null;
+              }
+              
+              if (startNew) {
+                currentSegment = {
+                  start: start,
+                  end: end,
+                  text: "",
+                  wordsInSegment: 0
+                };
+              }
+              
+              const needsSpace = currentSegment.text && !currentSegment.text.endsWith(' ');
+              currentSegment.text += (needsSpace ? " " : "") + text;
+              currentSegment.end = Math.max(currentSegment.end, end);
+              currentSegment.wordsInSegment++;
+            });
+            
+            // Add final segment
+            if (currentSegment && currentSegment.text.trim()) {
+              segments.push({
+                start: currentSegment.start,
+                end: currentSegment.end,
+                text: currentSegment.text.trim()
+              });
+            }
+          }
+        }
+      }
+      
       return segments;
     }
 
     function extractSegmentsFromGladiaResponse(result) {
       const segments = [];
-      console.log('Gladia response structure:', result);
+
       
-      // Check for different possible response structures
-      if (result?.prediction?.utterances) {
-        result.prediction.utterances.forEach(utt => {
+      // Match backend logic: Check for result.transcription.utterances first
+      if (result?.result?.transcription?.utterances) {
+        result.result.transcription.utterances.forEach(utt => {
+          const text = (utt.text || "").trim();
+          if (text) {
           segments.push({
             start: utt.start || 0,
             end: utt.end || 0,
-            text: utt.text || ""
+              text: text
           });
+          }
         });
-      } else if (result?.result?.utterances) {
+      } else if (result?.transcription?.utterances) {
         // Alternative structure
-        result.result.utterances.forEach(utt => {
+        result.transcription.utterances.forEach(utt => {
+          const text = (utt.text || "").trim();
+          if (text) {
           segments.push({
             start: utt.start || 0,
             end: utt.end || 0,
-            text: utt.text || ""
+              text: text
           });
+          }
         });
       } else if (result?.prediction?.words) {
         // Word-level timestamps - group into sentences
@@ -2402,35 +2456,66 @@
     function extractSegmentsFromElevenLabsResponse(result) {
       const segments = [];
       
-      // Check for different possible response formats
-      if (result?.alignment?.characters) {
-        // Character-level alignment available
-        let currentSegment = { start: 0, end: 0, text: "" };
-        let lastEnd = 0;
+      // Use the correct ElevenLabs API response structure (matches backend)
+      if (result?.words) {
+        let currentSegment = null;
+        const maxWordsPerSegment = 15;
+        const maxGapSeconds = 1.0;
         
-        result.alignment.characters.forEach((char, index) => {
-          if (char.character && char.start_time_seconds !== undefined) {
-            if (currentSegment.text === "") {
-              currentSegment.start = char.start_time_seconds;
+        result.words.forEach(item => {
+          const itemType = item.type;
+          const text = (item.text || "").trim();
+          const start = item.start;
+          const end = item.end;
+          
+          // Skip spacing items
+          if (itemType === "spacing") return;
+          if (start === undefined || end === undefined) return;
+          
+          let startNew = false;
+          if (!currentSegment) {
+            startNew = true;
+          } else {
+            const gap = start - currentSegment.end;
+            const prevEndsSentence = currentSegment.text.endsWith('.') || 
+                                   currentSegment.text.endsWith('!') || 
+                                   currentSegment.text.endsWith('?');
+            if (gap > maxGapSeconds || 
+                currentSegment.wordsInSegment >= maxWordsPerSegment || 
+                prevEndsSentence) {
+              startNew = true;
             }
-            currentSegment.text += char.character;
-            currentSegment.end = char.end_time_seconds || char.start_time_seconds;
-            lastEnd = currentSegment.end;
-            
-            // Break into segments at sentence boundaries or after ~10 seconds
-            if ((char.character.match(/[.!?]\s/) || (currentSegment.end - currentSegment.start) > 10) && currentSegment.text.trim()) {
+          }
+          
+          if (startNew && currentSegment) {
+            currentSegment.text = currentSegment.text.trim();
+            if (currentSegment.text) {
               segments.push({
                 start: currentSegment.start,
                 end: currentSegment.end,
-                text: currentSegment.text.trim()
+                text: currentSegment.text
               });
-              currentSegment = { start: lastEnd, end: lastEnd, text: "" };
             }
+            currentSegment = null;
           }
+          
+          if (startNew) {
+            currentSegment = {
+              start: start,
+              end: end,
+              text: "",
+              wordsInSegment: 0
+            };
+          }
+          
+          const needsSpace = currentSegment.text && !currentSegment.text.endsWith('[');
+          currentSegment.text += (needsSpace ? " " : "") + text;
+          currentSegment.end = Math.max(currentSegment.end, end);
+          currentSegment.wordsInSegment++;
         });
         
-        // Add final segment if there's remaining text
-        if (currentSegment.text.trim()) {
+        // Add final segment
+        if (currentSegment && currentSegment.text.trim()) {
           segments.push({
             start: currentSegment.start,
             end: currentSegment.end,
@@ -2557,17 +2642,14 @@
           return; 
       }
       
-      // Clear error flags for selected files to allow retry
       let errorsCleared = false;
       fileQueue.forEach(file => {
           if (file.selected !== false && file.error) {
-              delete file.error; // Clear error flag to allow retry
-              console.log(`Cleared error flag for file: ${file.name}`);
+              delete file.error;
               errorsCleared = true;
           }
       });
       
-      // Update UI if any errors were cleared
       if (errorsCleared) {
           updateFileQueue();
       }
@@ -2613,9 +2695,14 @@
     async function processFile(file) {
         const selectedModel = document.querySelector('input[name="model_option"]:checked').value;
         const currentJobId = document.getElementById('job_id').value;
-        console.log(`processFile: ${file.name}, Model: ${selectedModel}, Job: ${currentJobId}`);
 
-        // Check if this is a local model that requires the server
+
+        if (file.error) {
+            delete file.error;
+            updateFileQueue();
+        }
+
+
         const isLocalModel = ['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'turbo'].includes(selectedModel);
         
         if (isLocalModel && !serverAvailable) {
@@ -2623,7 +2710,7 @@
             return;
         }
 
-        // Use direct API calls for cloud models when server is not available
+
         if (!serverAvailable && !isLocalModel) {
             try {
                 updateProgress(10, 'Connecting to cloud API...');
@@ -2636,7 +2723,7 @@
             return;
         }
 
-        // Use server-based processing (original code)
+
         const formData = new FormData();
         formData.append('file', file);
         formData.append('job_id', currentJobId);
