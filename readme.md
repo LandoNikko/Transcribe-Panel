@@ -1,158 +1,88 @@
 # Kaira Transcribe Panel
 
-Kaira Transcribe Panel is a web app for local and cloud transcription (STT: speech-to-text) models. It's a privacy-conscious tool for transcribing audio/video files using OpenAI's open-source Whisper models, as well as offering cloud options (OpenAI, Deepgram, Gladia) where you use your own API key. Compare each model's output speed, quality and pricing. Think of this like Automatic1111, but made for transcriptions.
+Kaira Transcribe Panel is an interface for local and cloud transcription models for comparing their output speed, quality and pricing.
 
-![Kaira Screenshot](https://github.com/LandoNikko/Kaira-Transcribe-Panel/blob/main/Kaira_Homescreen.jpg?raw=true)
+Try it here: https://landonikko.github.io/Kaira-Transcribe-Panel
 
----
+The hosted version is a local interface that works by using your own API keys and caches the data in your browser.
 
-## Table of Contents
+For testing local models, see the Python Setup.
 
-- [Features Overview](#features-overview)
-- [Installation](#installation)
-- [Launching the App](#launching-the-app)
-- [Cloud Models](#cloud-models)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License & Credits](#license--credits)
+![Kaira Screenshot](https://i.imgur.com/uJTJf1L.png)
 
-## Features Overview
+## Features
 
-- **Local Models** (via `openai-whisper`):
-  - Tiny, Base, Small, Medium, Turbo and Large.
-- **Cloud Models (BYOK — Bring Your Own Key):**
-  - OpenAI Whisper-1
-  - Deepgram Nova-3 *(Summarization & Topic Detection supported)*
-  - Gladia *(English-only for now)*
-- **Transcript Outputs:** Paragraphs, Segments, SRT, VTT and TSV.
-- **Media Sync:** Built-in audio/video player with waveform, real-time paragraph highlighting synced to playback and click-to-seek transcript.
-- **Personalization:** From light mode to dark modes and cute (E Ink, Nova, Minty, Toffee).
-- **Queue Support**
-  - Add/remove and transcribe multiple files.
-- **Price Calculator:** Estimates API costs for cloud models.
-- **Convenience:** Copy/download results, notifications, word/character stats.
+**Local Models** (OpenAI Whisper)
+- Tiny, Base, Small, Medium, Turbo, Large
 
-## Installation
+**Cloud Models** (Bring Your Own API Key)
+- **OpenAI**: Whisper-1, GPT-4o, GPT-4o Mini
+   - 4o supports custom prompting for translations and localization
+- **Deepgram**: Nova-3
+   - With AI summarization & topic detection
+- **Gladia**: Gladia
+- **ElevenLabs**: Scribe-v1
 
-### 1. Clone and Enter the Project Directory
+**Smart Features**
+- **Batch Processing**: Queue multiple files
+- **Media Player**: Audio/video preview with waveform visualization
+- **Live Sync**: Transcript segments are highlighted by audio position
+- **Multiple Formats**: SRT, VTT, TSV, plain text, numbered segments
+- **Cost Calculator**: API pricing estimates per file
+- **UI Themes**: E Ink, Nova, Minty, Toffee
+- **Statistics**: Word count, character count, processing time
 
-```bash
-git clone https://github.com/kairauser/KairaTranscribePanel.git
-cd KairaTranscribePanel
-```
+## API Keys (Cloud Models Only)
 
-### 2. Install Python + Dependencies
+All cloud providers offer free starting credits, with some offering monthly refills:
 
-- Use **Python 3.8+**
-- Install **PyTorch** for your system: [https://pytorch.org](https://pytorch.org)
-
-### ffmpeg
-
-To enable audio/video processing, install **ffmpeg**:
-
-- **macOS:**
-  ```bash
-  brew install ffmpeg
-  ```
-- **Ubuntu/Debian:**
-  ```bash
-  sudo apt install ffmpeg
-  ```
-- **Windows:**
-  Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add it to your system PATH.
-
-### Other Python dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-> Sample `requirements.txt`:
-> ```
-> Flask
-> Flask-SocketIO
-> openai-whisper
-> openai
-> requests
-> torch
-> ```
-
-### Project Structure
-
-```
-Kaira_Transcribe_Panel/
-├── temp/                    # Processing/transcribing files are temporarily stored here
-├── Kaira_Transcribe_Panel.html  # Local interface
-├── Launch_Kaira.py         # Launcher script for the app
-├── readme.md               # Project documentation
-├── requirements.txt        # Python dependencies
-```
-
-## Launching the App
-
-### 1. Run
-
-```bash
-python Launch_Kaira.py
-```
-
-### 2. Open the Web App
-
-Visit `http://localhost:5000` in your browser.
-
-## Cloud Models
-
-To transcribe with **Whisper-1**, **Deepgram**, or **Gladia**:
-
-- Paste your API key when prompted in the UI.
-- API keys are stored **only** in your **browser's localStorage**.
-- You can remove them anytime by clearing your browser storage.
-
-### Where to Get API Keys
-
-- [OpenAI](https://platform.openai.com/account/api-keys)
+- [OpenAI](https://platform.openai.com/api-keys)
 - [Deepgram](https://console.deepgram.com/signup)
-- [Gladia](https://gladia.io)
+- [Gladia](https://app.gladia.io)
+- [ElevenLabs](https://elevenlabs.io)
 
-## Roadmap
+*API keys can be stored in your browser the same way your passwords are saved.*
 
-- Better documentation
-- Translation -tab with different options (API provider's offers and LLM workflow integration).
-- New transcription models, local and cloud.
-- Explore in-browser-only Whisper execution (e.g., ONNX, Transformers.js).
-- Accessibility (ARIA-compliant components).
-- Eliminate the external CDN requirement to bundle WaveSurfer.js locally (so you don't need an internet connection to see the audio player).
-- Modular plugin-style cloud support (like A1111 extensions) to keep local version minimal by default.
+## Python Setup (For Local Models)
 
+### Requirements
+- Python 3.8+
+- PyTorch (install from [pytorch.org](https://pytorch.org))
+- FFmpeg
+- Modern web browser
 
-## Contributing
+### Installation
 
-This project is a personal hobby project and under active development. While it's not a full-fledged product, contributions are very welcome if you find the tool useful or want to help it evolve.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/LandoNikko/Kaira-Transcribe-Panel.git
+   cd Kaira-Transcribe-Panel
+   ```
 
-We follow a simple and open workflow:
+2. **Install Python dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-1. **Fork the repository.**
-2. **Create a new branch** for your feature or bug fix: `git checkout -b feature/your-feature-name` or `git checkout -b fix/your-bug-fix`.
-3. **Make your changes.** Try to keep things consistent with the UI/UX.
-4. **Test your changes thoroughly.**
-5. **Commit your changes:** `git commit -m "Add concise description of changes"`.
-6. **Push to your branch:** `git push origin feature/your-feature-name`.
-7. **Create a Pull Request** on the original repository.
+3. **Install FFmpeg** (required for media processing)
+   - **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
+   - **macOS**: `brew install ffmpeg`
+   - **Linux**: `sudo apt install ffmpeg`
 
-> This project uses the Fork + Pull Request workflow. Anyone is welcome to fork the repo, make changes and submit a PR.
+4. **Run the application**
+   ```bash
+   python Launch_Kaira.py
+   ```
+   Open `http://localhost:5000` in your browser
 
-Please also feel free to open **Issues** for bug reports, feature requests, feedback or share how you use it.
+## Tips
 
----
+- **Local models**: No internet required, complete privacy. Relies on your hardware (GPU vram), so transcriptions can be slow.
+- **Cloud models**: Fast, advanced features, requires API keys. Costs, but very cheap. Can be used heavily with just free credits.
+- **File support**: Most audio/video formats (MP3, WAV, MP4, etc.)
+- **Batch mode**: Select multiple files and process them sequentially.
+- **Export options**: Copy to clipboard or download in various formats.
 
-## License & Credits
+## License
 
-**License:** MIT — see the [`LICENSE`](LICENSE) file.
-
-**Credits:**
-
-- [OpenAI Whisper](https://github.com/openai/whisper)
-- [WaveSurfer.js](https://wavesurfer-js.org/)
-- [Flask](https://flask.palletsprojects.com/) + [Flask-SocketIO](https://flask-socketio.readthedocs.io/)
-- [Remix Icon](https://remixicon.com/)
-- APIs: OpenAI, Deepgram, Gladia
+MIT License - see [LICENSE](LICENSE) file.
