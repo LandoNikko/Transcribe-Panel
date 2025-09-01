@@ -137,6 +137,15 @@ def generate_plain_srt_from_segments(segments):
         output += f"{i}\n{start_time} --> {end_time}\n{seg['text'].strip()}\n\n"
     return output.strip()
 
+def generate_plain_vtt_from_segments(segments):
+    """Generate a plain text VTT file from segments for download."""
+    output = "WEBVTT\n\n"
+    for seg in segments:
+        start_time = format_time(seg["start"]).replace(",", ".")
+        end_time = format_time(seg["end"]).replace(",", ".")
+        output += f"{start_time} --> {end_time}\n{seg['text'].strip()}\n\n"
+    return output.strip()
+
 ######################################################
 # Additional utility for measuring tokens
 ######################################################
@@ -282,6 +291,7 @@ def build_all_transcript_formats(segments):
     tsv_html = generate_tsv_from_segments(segments)
     tsv_plain = generate_plain_tsv_from_segments(segments)
     plain_srt_for_download = generate_plain_srt_from_segments(segments)
+    plain_vtt_for_download = generate_plain_vtt_from_segments(segments)
 
     return {
         "srt_text": srt_text,
@@ -290,7 +300,8 @@ def build_all_transcript_formats(segments):
         "vtt_text": vtt_text,
         "tsv_text": tsv_html,
         "tsv_plain": tsv_plain,
-        "plain_srt": plain_srt_for_download
+        "plain_srt": plain_srt_for_download,
+        "plain_vtt": plain_vtt_for_download
     }
 
 ######################################################

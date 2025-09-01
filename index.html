@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
-  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
   <style>
     :root {
 
@@ -2558,7 +2558,10 @@
         default_transcript: generateSyncedTranscriptFromSegments(segments),
         numbered_transcript: generateNumberedTranscriptFromSegments(segments),
         vtt_text: generateVttFromSegments(segments),
-        tsv_text: generateTsvFromSegments(segments)
+        tsv_text: generateTsvFromSegments(segments),
+        plain_srt: generatePlainSrtFromSegments(segments),
+        tsv_plain: generatePlainTsvFromSegments(segments),
+        plain_vtt: generatePlainVttFromSegments(segments)
       };
     }
 
@@ -2633,6 +2636,37 @@
       });
       output += '</tbody></table>';
       return output;
+    }
+
+    // Plain format generators (for proper file downloads)
+    function generatePlainSrtFromSegments(segments) {
+      let output = "";
+      segments.forEach((seg, i) => {
+        const startTime = formatTime(seg.start);
+        const endTime = formatTime(seg.end);
+        output += `${i + 1}\n${startTime} --> ${endTime}\n${seg.text.trim()}\n\n`;
+      });
+      return output.trim();
+    }
+
+    function generatePlainVttFromSegments(segments) {
+      let output = "WEBVTT\n\n";
+      segments.forEach(seg => {
+        const startTime = formatTime(seg.start).replace(",", ".");
+        const endTime = formatTime(seg.end).replace(",", ".");
+        output += `${startTime} --> ${endTime}\n${seg.text.trim()}\n\n`;
+      });
+      return output.trim();
+    }
+
+    function generatePlainTsvFromSegments(segments) {
+      let output = "Segment\tStart\tEnd\tText\n";
+      segments.forEach((seg, i) => {
+        const startTime = formatTime(seg.start);
+        const endTime = formatTime(seg.end);
+        output += `${i + 1}\t${startTime}\t${endTime}\t${seg.text.trim()}\n`;
+      });
+      return output.trim();
     }
 
     // --- Transcription Process ---
@@ -2937,7 +2971,7 @@
             });
             wavesurfer.isReady = false;
             wavesurfer.load(currentPreviewedFile.objectURL);
-            wavesurfer.on('ready', () => { wavesurfer.isReady = true; currentFileDuration = wavesurfer.getDuration() || 0; document.querySelector(".time-right").textContent = formatTime(currentFileDuration); document.querySelector(".time-left").textContent = "0:00"; attachSyncToPlayer(); requestPriceCalculatorUpdate(); setupPlayerEventHandlers(); }); // Added setupPlayerEventHandlers here too
+            wavesurfer.on('ready', () => { wavesurfer.isReady = true; currentFileDuration = wavesurfer.getDuration() || 0; document.querySelector(".time-right").textContent = formatTimeForDisplay(currentFileDuration); document.querySelector(".time-left").textContent = "0:00"; attachSyncToPlayer(); requestPriceCalculatorUpdate(); setupPlayerEventHandlers(); }); // Added setupPlayerEventHandlers here too
             wavesurfer.on('error', (err) => { showToast('error', 'Audio Error', 'Failed to load audio waveform.'); currentFileDuration = 0; requestPriceCalculatorUpdate(); });
             setupAudioSeekPreview(); // Add seek preview for audio
         } else {
@@ -2977,7 +3011,7 @@
             if (!currentWS?.isReady) return;
             const rect = waveformEl.getBoundingClientRect(); const x = e.clientX - rect.left; const duration = currentWS.getDuration() || 0;
             const time = Math.max(0, Math.min(duration, (x / rect.width) * duration));
-            document.querySelector(".time-center").textContent = formatTime(time);
+            document.querySelector(".time-center").textContent = formatTimeForDisplay(time);
             if (isWaveformDragging) currentWS.seekTo(time / duration);
         }
         function handleWaveformMouseLeave() { if (!isWaveformDragging) document.querySelector(".time-center").textContent = ""; }
@@ -3084,7 +3118,7 @@
     function syncAudio(time) {
         if (isNaN(time)) return;
         const timeLeftEl = audioPlayerContainer.querySelector(".time-left"); // Target specific time display
-        if(timeLeftEl) timeLeftEl.textContent = formatTime(time);
+        if(timeLeftEl) timeLeftEl.textContent = formatTimeForDisplay(time);
         // Throttle highlight updates to animation frames
         queuedHighlightTime = time;
         if (!highlightScheduled) {
@@ -3320,7 +3354,7 @@
                 fileExtension = 'srt';
                 break;
             case 'vtt':
-                contentToDownload = htmlToPlainTextVtt(document.querySelector("#vttTranscript .transcript-body")?.innerHTML || '');
+                contentToDownload = results.plain_vtt || htmlToPlainTextVtt(document.querySelector("#vttTranscript .transcript-body")?.innerHTML || '');
                 fileExtension = 'vtt';
                 break;
             case 'tsv':
@@ -3843,7 +3877,7 @@
     // --- Formatting & Misc ---
     function formatTopics(topicsData) { if (!topicsData?.segments?.length) return '<p><i>No topics detected.</i></p>'; const uniqueTopics = new Set(); topicsData.segments.forEach(seg => seg.topics?.forEach(t => uniqueTopics.add(t.topic))); if (uniqueTopics.size === 0) return '<p><i>No specific topics identified.</i></p>'; let html = '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">'; uniqueTopics.forEach(topic => { html += `<span class="topic-tag">${topic}</span>`; }); html += '</div>'; return html; }
     const languages = { latin: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', cyrillic: 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', japanese: 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん', korean: 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗㅛㅜㅠㅡㅣ', chinese: '的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对可她里后小么心多天而能好都然没日于起还发成', arabic: 'ابتثجحخدذرزسشصضطظعغفقكلمنهويءآأؤإئ', devanagari: 'अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह' }; // For typewriter
-    function formatTime(seconds) { if (isNaN(seconds) || seconds < 0) return "0:00"; const totalSeconds = Math.floor(seconds); const minutes = Math.floor(totalSeconds / 60); const secs = totalSeconds % 60; return `${minutes}:${secs.toString().padStart(2, '0')}`; } // Local JS time formatter
+    function formatTimeForDisplay(seconds) { if (isNaN(seconds) || seconds < 0) return "0:00"; const totalSeconds = Math.floor(seconds); const minutes = Math.floor(totalSeconds / 60); const secs = totalSeconds % 60; return `${minutes}:${secs.toString().padStart(2, '0')}`; } // Local JS time formatter for UI display
 
     // Get consistent waveform colors
     function getWaveformColors() {
@@ -3922,7 +3956,7 @@
                     wavesurfer.on('ready', () => { 
                         wavesurfer.isReady = true;
                         currentFileDuration = wavesurfer.getDuration() || 0;
-                        document.querySelector(".time-right").textContent = formatTime(currentFileDuration);
+                        document.querySelector(".time-right").textContent = formatTimeForDisplay(currentFileDuration);
                         document.querySelector(".time-left").textContent = "0:00";
                         setupPlayerEventHandlers();
                         attachSyncToPlayer();
@@ -3935,7 +3969,7 @@
                     videoWavesurfer.on('ready', () => {
                         videoWavesurfer.isReady = true;
                         currentFileDuration = videoWavesurfer.getDuration() || 0;
-                        document.querySelector(".time-right").textContent = formatTime(currentFileDuration);
+                        document.querySelector(".time-right").textContent = formatTimeForDisplay(currentFileDuration);
                         document.querySelector(".time-left").textContent = "0:00";
                         attachSyncToPlayer();
                         setupPlayerEventHandlers();
