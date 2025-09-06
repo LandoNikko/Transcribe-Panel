@@ -427,6 +427,10 @@ def extract_full_text_from_result(result):
 def index():
     return render_template('index.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_file('favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 ######################################################
 # Background tasks for each STT approach
 ######################################################
