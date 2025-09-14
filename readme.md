@@ -20,14 +20,17 @@ For testing local models, see the Python Setup.
    - 4o supports custom prompting for translations and localization
 - **Deepgram**: Nova-3
    - With AI summarization & topic detection
-- **Gladia**: Gladia
+- **Gladia**: Gladia v2
 - **ElevenLabs**: Scribe-v1
 
 **Smart Features**
+- **Example File**: Try the tool with a sample
 - **Batch Processing**: Queue multiple files
 - **Media Player**: Audio/video preview with waveform visualization
 - **Live Sync**: Transcript segments are highlighted by audio position
 - **Multiple Formats**: SRT, VTT, TSV, plain text, numbered segments
+- **Transcript Editing**: Edit transcripts
+- **Upload/Import**: Import existing transcript files
 - **Cost Calculator**: API pricing estimates per file
 - **UI Themes**: E Ink, Nova, Minty, Toffee
 - **Statistics**: Word count, character count, processing time

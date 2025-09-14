@@ -307,6 +307,9 @@
     .model-options { margin-bottom: 0.5rem; }
     .options-title { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
     .options-title i { color: var(--primary-color); }
+    .ri-question-line { cursor: pointer; color: var(--text-secondary); }
+    .ri-question-line:hover { color: var(--text-primary); }
+    .help-icon-pricing { cursor: pointer; color: var(--text-tertiary); opacity: 0.7; }
     .options-title h3, .options-title h4 { margin: 0; font-size: 0.9rem; font-weight: 500; }
     .model-tabs-header { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 1.5rem; }
     .model-tab-button { flex: 1; padding: 0.75rem 1rem; background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-size: 0.9rem; font-weight: 500; color: var(--text-secondary); transition: var(--transition); position: relative; }
@@ -338,7 +341,7 @@
     .model-name { font-weight: 600; font-size: 0.9rem; }
     .model-desc { font-size: 0.75rem; color: var(--text-tertiary); text-align: right; }
     .model-done-badge { position: absolute; top: -6px; right: -6px; background-color: var(--success); color: white; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.3rem; border-radius: 3px; }
-    .api-key-section { margin-bottom: 1.5rem; display: none; order: 1; }
+    .api-key-section { margin: 1rem 0rem 1.5rem 0rem; display: none; order: 1; }
     .api-key-section.active { display: block; }
     .api-key-input { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
     .api-key-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 0.5rem; }
@@ -346,7 +349,6 @@
     .api-key-toggle { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 1.2rem; padding: 0.25rem; line-height: 1; }
     .api-key-toggle:hover { color: var(--text-primary); }
     .api-key-instructions { display: none; margin-top: 0.5rem; padding: 0.75rem 1rem; background-color: rgba(0, 0, 0, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm, 6px); font-size: 0.85rem; color: var(--text-secondary); }
-    .api-help-text { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.4; }
     .api-key-instructions h4 { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem; }
     .api-key-instructions ol { margin-left: 1.25rem; padding-left: 0.5rem; line-height: 1.6; }
     .api-key-instructions li { margin-bottom: 0.25rem; }
@@ -820,7 +822,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        z-index: 1000;
+        z-index: 999;
       }
       
       .modal-content {
@@ -830,21 +832,33 @@
         max-height: none;
         border-radius: 0;
         border: none;
-        z-index: 1001;
+        position: relative;
       }
       
       .modal-body {
         padding: 1rem;
-        height: calc(100% - 80px); /* Account for header height */
+        height: calc(100% - 80px);
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
       }
       
       .modal-close {
-        position: absolute;
-        top: 1rem;
+        position: fixed;
+        bottom: 1rem;
         right: 1rem;
-        z-index: 1002;
+        z-index: 1003;
+        background: var(--primary-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 6px 24px 0 rgba(0,0,0,0.35);
+      }
+      .modal-close i {
+        font-size: 1.75rem;
       }
     }
 
@@ -1161,27 +1175,23 @@
                 </div>
                 <!-- API Key Sections -->
                 <div class="api-key-section" id="openaiApiKeySection" style="display: none;">
-                  <div class="options-title"><i class="ri-key-2-line"></i><h3>OpenAI API Key</h3></div>
+                  <div class="options-title"><i class="ri-key-2-line"></i><h3>OpenAI API Key</h3><i class="ri-question-line" onclick="openModelInfoModal()" title="Help"></i></div>
                   <div class="api-key-input"><input type="password" id="api_key_cloud" name="api_key_cloud" placeholder="Enter your OpenAI API key" class="input"><button type="button" class="btn btn-secondary" id="showOpenApiKey"><i class="ri-eye-line"></i></button></div>
-                  <p class="api-help-text">Need help getting an API key? Check the <strong>Model Information</strong> modal (? button above) for setup instructions.</p>
                 </div>
                 <div class="api-key-section" id="deepgramApiKeySection" style="display: none;">
-                  <div class="options-title"><i class="ri-key-2-line"></i><h3>Deepgram API Key</h3></div>
+                  <div class="options-title"><i class="ri-key-2-line"></i><h3>Deepgram API Key</h3><i class="ri-question-line" onclick="openModelInfoModal()" title="Help"></i></div>
                   <div class="api-key-input"><input type="password" id="deepgram_api_key" name="deepgram_api_key" placeholder="Enter your Deepgram API key" class="input"><button type="button" class="btn btn-secondary" id="showDeepgramApiKey"><i class="ri-eye-line"></i></button></div>
-                  <p class="api-help-text">Need help getting an API key? Check the <strong>Model Information</strong> modal (? button above) for setup instructions.</p>
                 </div>
                 <div class="api-key-section" id="gladiaApiKeySection" >
-                  <div class="options-title"><i class="ri-key-2-line"></i><h3>Gladia API Key</h3></div>
+                  <div class="options-title"><i class="ri-key-2-line"></i><h3>Gladia API Key</h3><i class="ri-question-line" onclick="openModelInfoModal()" title="Help"></i></div>
                   <div class="api-key-input"><input type="password" id="gladia_api_key" name="gladia_api_key" placeholder="Enter your Gladia API key" class="input"><button type="button" class="btn btn-secondary" id="showGladiaApiKey"><i class="ri-eye-line"></i></button></div>
-                  <p class="api-help-text">Need help getting an API key? Check the <strong>Model Information</strong> modal (? button above) for setup instructions.</p>
                 </div>
                 <div class="api-key-section" id="elevenlabsApiKeySection" style="display: none;">
-                    <div class="options-title"><i class="ri-key-2-line"></i><h3>ElevenLabs API Key</h3></div>
+                    <div class="options-title"><i class="ri-key-2-line"></i><h3>ElevenLabs API Key</h3><i class="ri-question-line" onclick="openModelInfoModal()" title="Help"></i></div>
                     <div class="api-key-input">
                         <input type="password" id="elevenlabs_api_key" name="elevenlabs_api_key" placeholder="Enter your ElevenLabs API key" class="input">
                         <button type="button" class="btn btn-secondary" id="showElevenLabsApiKey"><i class="ri-eye-line"></i></button>
                     </div>
-                    <p class="api-help-text">Need help getting an API key? Check the <strong>Model Information</strong> modal (? button above) for setup instructions.</p>
                 </div>
                 <div id="deepgramOptions" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
                   <div class="options-title"><i class="ri-robot-line"></i><h3>Deepgram AI Features (English Only)</h3></div>
@@ -1201,7 +1211,7 @@
                                     </div>
                                   </div>
                  <div id="priceCalculator" style="display: none; margin-top: 1.5rem; padding: 1rem; background-color: var(--secondary-bg); border-radius: var(--radius); border: 1px solid var(--border-color);">
-                    <div class="options-title"><h4>Price Calculator</h4><a id="pricingDocLink" href="#" target="_blank" style="margin-left: auto; color: var(--text-tertiary); cursor: pointer;" title="Pricing model"><i class="ri-question-line" style="opacity: 0.7;"></i></a></div>
+                    <div class="options-title"><h4>Price Calculator</h4><a id="pricingDocLink" href="#" target="_blank" style="margin-left: auto; color: var(--text-tertiary); cursor: pointer;" title="Pricing model"><i class="ri-question-line help-icon-pricing" style="opacity: 0.7;"></i></a></div>
                     <div class="price-details">
                         <div class="price-row" id="fileDurationRow"><span class="price-label">File Duration:</span><span class="price-value" id="fileDuration">N/A</span></div>
                         <div class="price-row" id="apiPricingRow"><span class="price-label" id="apiPricingLabel">API Base Cost:</span><span class="price-value" id="apiPricingValue">N/A</span></div>
@@ -1691,8 +1701,10 @@
             sidebarElements.sidebar.classList.remove('mobile-open');
             sidebarElements.sidebar.style.display = 'none';
             
-            // Restore background scrolling when mobile sidebar is closed
-            document.body.style.overflow = '';
+            const modal = document.getElementById('modelInfoModal');
+            if (!modal || modal.style.display !== 'flex') {
+              document.body.style.overflow = '';
+            }
             
             updateSidebarIcon('closed');
           }
@@ -1783,8 +1795,10 @@
             sidebarElements.sidebar.classList.remove('mobile-open');
             sidebarElements.sidebar.style.display = 'none';
             
-            // Restore background scrolling when mobile sidebar is closed
-            document.body.style.overflow = '';
+            const modal = document.getElementById('modelInfoModal');
+            if (!modal || modal.style.display !== 'flex') {
+              document.body.style.overflow = '';
+            }
             
             updateSidebarIcon('closed');
           } else {
@@ -1896,10 +1910,8 @@
           switchModelTab('cloud');
           handleModelSelection();
         }
-        
-        // Wait a moment for file processing, then add the transcript result
+
         setTimeout(() => {
-          // Find the example file in the queue (it should be the last added file)
           const exampleFile = fileQueue.find(f => f.name === 'example-audio.mp3');
           const targetFileId = exampleFile ? exampleFile.id : currentActiveFile;
           
@@ -1913,17 +1925,14 @@
               elapsed_time: 0
             };
             
-            // Store the result
             setFileTranscription(targetFileId, 'scribe-v1', mockResult);
             
-            // Ensure this file is selected
             currentActiveFile = targetFileId;
             
-            // Update UI
             updateModelCompletionStatus(targetFileId);
             showFileResult(targetFileId);
             updateTranscriptionStats(transcriptData.default_transcript, 0);
-            updateFileQueue(); // Refresh file list to show completion status
+            updateFileQueue();
           }
           showToast('success', 'Example Loaded', 'Japanese train announcement example loaded with transcript!');
         }, 500);
@@ -4491,12 +4500,12 @@
         // Extract just the text lines from edited content
         const editedLines = editedText.split('\n').filter(line => {
             const cleaned = line.trim();
-            // Skip timing lines, index numbers, and empty lines
+            // Skip timing lines, index numbers and empty lines
             return cleaned && 
-                   !cleaned.match(/^\d+$/) && // Skip SRT indices
-                   !cleaned.match(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/) && // Skip timing
-                   !cleaned.match(/^\d+\.\s/) && // Skip numbered prefixes
-                   !cleaned.match(/^\d+\.\d+\t\d+\.\d+\t/); // Skip TSV timing
+                   !cleaned.match(/^\d+$/) &&
+                   !cleaned.match(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/) &&
+                   !cleaned.match(/^\d+\.\s/) &&
+                   !cleaned.match(/^\d+\.\d+\t\d+\.\d+\t/);
         });
         
         // Map edited text back to original segments with preserved timing
@@ -5463,11 +5472,12 @@
 
     // Event listeners for modal
     document.addEventListener('DOMContentLoaded', function() {
-        // Question button click
+        // Question button click (main settings help)
         const questionButton = document.querySelector('.settings-title .btn-icon');
         if (questionButton) {
             questionButton.addEventListener('click', openModelInfoModal);
         }
+
 
         // Close button click
         const closeButton = document.querySelector('.modal-close');
