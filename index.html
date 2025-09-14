@@ -1899,7 +1899,11 @@
         
         // Wait a moment for file processing, then add the transcript result
         setTimeout(() => {
-          if (currentActiveFile) {
+          // Find the example file in the queue (it should be the last added file)
+          const exampleFile = fileQueue.find(f => f.name === 'example-audio.mp3');
+          const targetFileId = exampleFile ? exampleFile.id : currentActiveFile;
+          
+          if (targetFileId) {
             const mockResult = {
               fileName: 'example-audio.mp3',
               model: 'scribe-v1',
@@ -1910,12 +1914,16 @@
             };
             
             // Store the result
-            setFileTranscription(currentActiveFile, 'scribe-v1', mockResult);
+            setFileTranscription(targetFileId, 'scribe-v1', mockResult);
+            
+            // Ensure this file is selected
+            currentActiveFile = targetFileId;
             
             // Update UI
-            updateModelCompletionStatus(currentActiveFile);
-            showFileResult(currentActiveFile);
+            updateModelCompletionStatus(targetFileId);
+            showFileResult(targetFileId);
             updateTranscriptionStats(transcriptData.default_transcript, 0);
+            updateFileQueue(); // Refresh file list to show completion status
           }
           showToast('success', 'Example Loaded', 'Japanese train announcement example loaded with transcript!');
         }, 500);
