@@ -49,10 +49,7 @@ All cloud providers offer free starting credits, with some offering monthly refi
 ## Python Setup (For Local Models)
 
 ### Requirements
-- Python 3.8+
-- PyTorch (install from [pytorch.org](https://pytorch.org))
-- FFmpeg
-- Modern web browser
+- Browser, Python 3.8+, (PyTorch [pytorch.org](https://pytorch.org)), FFmpeg
 
 ### Installation
 
@@ -88,4 +85,4 @@ All cloud providers offer free starting credits, with some offering monthly refi
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file.
+LGPL-2.1 License - see [LICENSE](LICENSE) file.
