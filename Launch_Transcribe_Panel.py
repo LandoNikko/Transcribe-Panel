@@ -783,7 +783,7 @@ def deepgram_transcription(job_id, filepath, api_key, summarize_enabled=False, t
 def gladia_transcription(job_id, filepath, api_key):
     start_time = time.time()
     model_name = "gladia"
-    detected_language = "en"
+    detected_language = "auto-detected"
 
     try:
         if cancellations.get(job_id, False):
@@ -792,7 +792,7 @@ def gladia_transcription(job_id, filepath, api_key):
         socketio.emit("progress_update", {
             "job_id": job_id,
             "progress": 30,
-            "message": f"Starting Gladia transcription",
+            "message": f"Starting Gladia v2 transcription",
             "elapsed": 0,
             "remaining": 0
         }, room=job_id)
@@ -811,7 +811,7 @@ def gladia_transcription(job_id, filepath, api_key):
             upload_result = r.json()
             audio_url = upload_result.get("audio_url")
             if not audio_url:
-                raise Exception("No audio_url in Gladia upload response")
+                raise Exception("No audio_url in Gladia v2 upload response")
 
         # Step 2) Request transcription
         transcription_headers = {
@@ -820,10 +820,11 @@ def gladia_transcription(job_id, filepath, api_key):
         }
         transcription_data = {
             "audio_url": audio_url,
-            "language": "en",
-            "detect_language": False,
+            "language_config": {
+                "languages": [],
+                "code_switching": False
+            },
             "translation": False,
-            "enable_code_switching": False,
             "diarization": True,
             "diarization_config": {
                 "number_of_speakers": None,
@@ -852,7 +853,7 @@ def gladia_transcription(job_id, filepath, api_key):
         transcription_id = tr_json.get("id")
         result_url = tr_json.get("result_url")
         if not transcription_id or not result_url:
-            raise Exception("Failed to get transcription ID or result_url from Gladia response")
+            raise Exception("Failed to get transcription ID or result_url from Gladia v2 response")
 
         # Step 3) Poll for results
         max_retries = 60
@@ -873,9 +874,17 @@ def gladia_transcription(job_id, filepath, api_key):
             polling_interval = min(15, polling_interval * 2)
 
         if not final_result or final_result.get("status") != "done":
-            raise Exception("Gladia transcription timed out or failed.")
+            raise Exception("Gladia v2 transcription timed out or failed.")
 
         transcript_data = final_result.get("result", {})
+        
+        # Extract language from Gladia V2 response structure
+        if ("transcription" in transcript_data and
+            isinstance(transcript_data["transcription"], dict) and
+            "languages" in transcript_data["transcription"] and
+            transcript_data["transcription"]["languages"]):
+            detected_language = transcript_data["transcription"]["languages"][0]
+        
         # Step 4) Extract segments
         segments = []
         if ("transcription" in transcript_data and
@@ -918,7 +927,7 @@ def gladia_transcription(job_id, filepath, api_key):
             language=detected_language
         )
     except Exception as e:
-        print(f"Gladia transcription error: {e}")
+        print(f"Gladia v2 transcription error: {e}")
         if not cancellations.get(job_id, False):
             socketio.emit("transcription_failed", {
                 "job_id": job_id,
