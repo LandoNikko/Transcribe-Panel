@@ -9,8 +9,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <style>
+    
     :root {
-
       --primary-color: #333333;
       --primary-dark: #1a1a1a;
       --primary-bg: #f2f2f2;
@@ -293,9 +293,7 @@
     .file-status.processing { background-color: var(--border-color); color: var(--warning); }
     .file-status.completed { background-color: var(--border-color); color: var(--success); }
     .file-status.failed { background-color: var(--border-color); color: var(--error); }
-    .file-models { display: flex; gap: 0.5rem; margin-left: auto; }
-    .file-model { background-color: var(--success); color: var(--tertiary-bg); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
-    .file-actions { display: flex; gap: 0.5rem; margin-left: 0.75rem; }
+    .file-actions { display: flex; gap: 0.5rem; margin-left: auto; }
     .file-actions button { background: none; border: none; color: var(--border-color); font-size: 1rem; cursor: pointer; transition: var(--transition); padding: 0.25rem; }
     .file-actions button:hover { color: var(--text-primary); }
 
@@ -335,12 +333,12 @@
     .model-option input:checked + label { background-color: var(--tertiary-bg); border-color: var(--primary-color); }
     .model-option input:checked + label:hover { background-color: var(--tertiary-bg); }
     .model-option input:checked + label .model-name { color: var(--primary-dark); font-weight: 700; }
-    .model-left { display: flex; align-items: center; gap: 0.5rem; }
+    .model-left { display: flex; align-items: center; gap: 0.5rem; flex: 1; }
     .model-icon { font-size: 1.25rem; color: var(--text-secondary); margin-bottom: 0; }
     .model-option input:checked + label .model-icon { color: var(--primary-color); }
     .model-name { font-weight: 600; font-size: 0.9rem; }
-    .model-desc { font-size: 0.75rem; color: var(--text-tertiary); text-align: right; }
-    .model-done-badge { position: absolute; top: -6px; right: -6px; background-color: var(--success); color: white; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.3rem; border-radius: 3px; }
+    .model-desc { font-size: 0.75rem; color: var(--text-tertiary); text-align: right; flex-shrink: 0; }
+    .model-done-badge { color: var(--success); font-size: 1.2rem; margin-left: 0.5rem; }
     .api-key-section { margin: 1rem 0rem 1.5rem 0rem; display: none; order: 1; }
     .api-key-section.active { display: block; }
     .api-key-input { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
@@ -1333,12 +1331,10 @@
     
     let currentActiveFile = null;
     let activeProcessingQueue = [];
-    let currentUploadedFile = null;
     let generationInProgress = false;
     let wavesurfer;
     let videoWavesurfer;
     let currentPreviewedFile = null;
-    let progressInterval;
     let socket = null;
     let isCancelled = false;
     let currentFontSize = 16;
@@ -1554,6 +1550,10 @@
       initializeModelIcons();
       handleScreenSize();
       
+      // Initialize transcript format to default to prevent sync issues
+      transcriptFormatSelect.value = 'default';
+      switchTab('default');
+      
       fileInput.addEventListener('change', handleFileSelection);
       dropZone.addEventListener('dragover', handleDragOver);
       dropZone.addEventListener('dragleave', handleDragLeave);
@@ -1643,7 +1643,6 @@
       if (domCache.priceCalculator) {
         requestPriceCalculatorUpdate();
       } else {
-        console.error('Price calculator element not found!');
       }
       
       clearQueueBtn.disabled = true;
@@ -1818,7 +1817,6 @@
           const icon = this.querySelector('i');
           
           if (!instructions || !instructions.classList.contains('api-key-instructions')) {
-            console.error('Could not find instructions element', instructions);
             return;
           }
 
@@ -1850,95 +1848,152 @@
 
     async function uploadExampleFile() {
       try {
-        // Fetch audio file
-        const audioResponse = await fetch('https://files.catbox.moe/xu2kk6.mp3');
+        updateProgress(10, 'Fetching example file...');
         
+        const audioResponse = await fetch('https://files.catbox.moe/xu2kk6.mp3');
         if (!audioResponse.ok) {
           throw new Error('Failed to fetch example audio file');
         }
         
+        updateProgress(40, 'Processing example file...');
         const audioBlob = await audioResponse.blob();
         
-        // Create audio file
         const audioFile = new File([audioBlob], 'example-audio.mp3', { type: 'audio/mpeg' });
         const fileList = new DataTransfer();
         fileList.items.add(audioFile);
         
-        // Process the audio file first
+        updateProgress(60, 'Adding file to queue...');
         processSelectedFiles(fileList.files);
         
-        // Embedded SRT content (to avoid CORS issues)
-        const srtText = `1
-00:00:01,139 --> 00:00:07,879
-本日もJR東日本をご利用くださいましてありがとうございます。
-
-2
-00:00:07,879 --> 00:00:11,380
-今度の一番線の列車は、
-
-3
-00:00:11,659 --> 00:00:14,638
-十三時ちょうど発、
-
-4
-00:00:14,638 --> 00:00:23,978
-湘南新宿ライン東海道線直通特別快速小田原行きです。
-
-5
-00:00:23,978 --> 00:00:32,097
-この列車は四つドア十五両です。
-
-6
-00:00:32,097 --> 00:00:37,679
-足元オレンジ色の十五両を乗車口でお待ちください。
-
-7
-00:00:37,679 --> 00:00:41,439
-グリーン車は足元オレンジ色の枠、
-
-8
-00:00:41,439 --> 00:00:44,618
-四号車と五号車でお待ちください。`;
-
-        const segments = parseTranscriptContent(srtText, 'srt');
-        const transcriptData = buildAllTranscriptFormats(segments);
+        // Load all example files to populate model caches
+        updateProgress(70, 'Loading example transcripts...');
         
-        // Select scribe-v1 model and switch to cloud tab
-        const scribeV1Radio = document.getElementById('scribe-v1');
-        if (scribeV1Radio) {
-          scribeV1Radio.checked = true;
-          switchModelTab('cloud');
-          handleModelSelection();
+        // Fetch all example files
+        const [gladiaResponse, scribeResponse, novaResponse] = await Promise.all([
+          fetch('./examples/transcribe-example-JP-gladia.srt'),
+          fetch('./examples/transcribe-example-JP-scribe-v1.srt'),
+          fetch('./examples/transcribe-example-JP-nova-3.srt')
+        ]);
+        
+        if (!gladiaResponse.ok) {
+          throw new Error(`Failed to load Gladia example: ${gladiaResponse.status} ${gladiaResponse.statusText}`);
         }
+        if (!scribeResponse.ok) {
+          throw new Error(`Failed to load Scribe example: ${scribeResponse.status} ${scribeResponse.statusText}`);
+        }
+        if (!novaResponse.ok) {
+          throw new Error(`Failed to load Nova-3 example: ${novaResponse.status} ${novaResponse.statusText}`);
+        }
+        
+        const [gladiaSrtText, scribeSrtText, novaSrtText] = await Promise.all([
+          gladiaResponse.text(),
+          scribeResponse.text(),
+          novaResponse.text()
+        ]);
+        
+
+        updateProgress(80, 'Processing transcript data...');
+        
+        // Process all transcripts
+        const gladiaSegments = parseTranscriptContent(gladiaSrtText, 'srt');
+        const scribeSegments = parseTranscriptContent(scribeSrtText, 'srt');
+        const novaSegments = parseTranscriptContent(novaSrtText, 'srt');
+        
+        const gladiaTranscriptData = buildAllTranscriptFormats(gladiaSegments);
+        const scribeTranscriptData = buildAllTranscriptFormats(scribeSegments);
+        const novaTranscriptData = buildAllTranscriptFormats(novaSegments);
+        
+        
+        // Ensure we're on cloud tab
+        switchModelTab('cloud');
+        
+        // Get current selected model to preserve UI state
+        const currentSelectedModel = getSelectedModel();
+        
+        // Default to scribe-v1 if no cloud model is selected
+        if (!currentSelectedModel || ['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'turbo'].includes(currentSelectedModel)) {
+          const scribeV1Radio = document.getElementById('scribe-v1');
+          if (scribeV1Radio) {
+            scribeV1Radio.checked = true;
+            handleModelSelection();
+          }
+        }
+        
 
         setTimeout(() => {
+          updateProgress(95, 'Populating model caches...');
+          
           const exampleFile = fileQueue.find(f => f.name === 'example-audio.mp3');
           const targetFileId = exampleFile ? exampleFile.id : currentActiveFile;
           
           if (targetFileId) {
-            const mockResult = {
+            
+            // Create Gladia mock result
+            const gladiaMockResult = {
+              fileName: 'example-audio.mp3',
+              model: 'gladia',
+              task: 'transcribe',
+              language: 'auto-detected',
+              ...gladiaTranscriptData,
+              elapsed_time: 0
+            };
+            
+            // Create Scribe-v1 mock result
+            const scribeMockResult = {
               fileName: 'example-audio.mp3',
               model: 'scribe-v1',
               task: 'transcribe',
               language: 'auto-detected',
-              ...transcriptData,
+              ...scribeTranscriptData,
               elapsed_time: 0
             };
             
-            setFileTranscription(targetFileId, 'scribe-v1', mockResult);
+            // Create Nova-3 mock result
+            const novaMockResult = {
+              fileName: 'example-audio.mp3',
+              model: 'nova-3',
+              task: 'transcribe',
+              language: 'auto-detected',
+              ...novaTranscriptData,
+              elapsed_time: 0
+            };
+            
+            
+            // Set transcriptions for all models
+            setFileTranscription(targetFileId, 'gladia', gladiaMockResult);
+            setFileTranscription(targetFileId, 'scribe-v1', scribeMockResult);
+            setFileTranscription(targetFileId, 'nova-3', novaMockResult);
+            
             
             currentActiveFile = targetFileId;
             
             updateModelCompletionStatus(targetFileId);
             showFileResult(targetFileId);
-            updateTranscriptionStats(transcriptData.default_transcript, 0);
+            
+            // Show stats for the currently selected model
+            const currentModel = getSelectedModel();
+            if (currentModel === 'gladia') {
+              updateTranscriptionStats(gladiaTranscriptData.default_transcript, 0);
+            } else if (currentModel === 'nova-3') {
+              updateTranscriptionStats(novaTranscriptData.default_transcript, 0);
+            } else {
+              updateTranscriptionStats(scribeTranscriptData.default_transcript, 0);
+            }
+            
             updateFileQueue();
+          } else {
           }
-          showToast('success', 'Example Loaded', 'Japanese train announcement example loaded with transcript!');
+          
+          updateProgress(100, 'Complete');
+          setTimeout(() => {
+            domCache.progressContainer.classList.remove('active');
+          }, 500);
+          
+          showToast('success', 'Examples Loaded', 'Japanese train announcement examples loaded for Gladia, Scribe-v1, and Nova-3! Switch between models to compare.');
         }, 500);
         
       } catch (error) {
-        console.error('Error fetching example files:', error);
+        domCache.progressContainer.classList.remove('active');
         showToast('error', 'Example Failed', 'Could not load example file. Please check your internet connection.');
       }
     }
@@ -2032,12 +2087,10 @@
         let filesAddedCount = 0;
         Array.from(fileList).forEach(file => {
             if (!file.type.startsWith('audio/') && !file.type.startsWith('video/')) {
-                 console.warn(`Skipping unsupported file type: ${file.name} (${file.type})`);
                  showToast('warning', 'Unsupported File', `${file.name} has an unsupported type.`);
                  return;
             }
              if (file.size > 1024 * 1024 * 1024) {
-                 console.warn(`Skipping large file: ${file.name} (${formatFileSize(file.size)})`);
                  showToast('warning', 'File Too Large', `${file.name} exceeds the 1GB size limit.`);
                  return;
             }
@@ -2134,7 +2187,6 @@
       }
       serverCheckComplete = true;
       updateUIBasedOnServerAvailability();
-      console.log('Server available:', serverAvailable);
     }
 
     function updateUIBasedOnServerAvailability() {
@@ -2170,14 +2222,12 @@
     // Socket Communication
     function connectSocket() {
       if (!serverAvailable) {
-        console.log('Server not available, skipping socket connection');
         return;
       }
       
       if (socket && socket.connected) {
         const currentJobId = document.getElementById('job_id').value;
         socket.emit('join', { job_id: currentJobId });
-        console.log("Socket already connected. Re-joining room:", currentJobId);
         return;
       }
       socket = io({ reconnection: true, reconnectionAttempts: 5, reconnectionDelay: 1000, reconnectionDelayMax: 5000, timeout: 20000 });
@@ -2249,15 +2299,14 @@
 
               progressBar.style.width = "0%"; progressPercent.textContent = "0%"; // Reset progress bar
               setTimeout(processNextFileInQueue, 300); // Move to next file
-            } else { console.warn("Completed event received but current file invalid in active queue."); processNextFileInQueue(); }
-          } else { console.warn("Completed event received but currentProcessingIndex is invalid."); processNextFileInQueue(); }
-        } else { console.log(`Ignoring completion for different job: ${data.job_id}`); }
+            } else { processNextFileInQueue(); }
+          } else { processNextFileInQueue(); }
+        }
       });
 
       socket.off('transcription_failed').on('transcription_failed', (data) => {
          const currentJobId = document.getElementById('job_id').value;
          if (data.job_id === currentJobId) {
-            console.error('Transcription failed:', data.error);
             showToast('error', 'Transcription Failed', data.error);
             if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
                 const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Safe access
@@ -2275,7 +2324,6 @@
       socket.off('transcription_cancelled').on('transcription_cancelled', (data) => {
         const currentJobId = document.getElementById('job_id').value;
         if (data.job_id === currentJobId) {
-            console.log('Transcription cancelled by server for job:', data.job_id);
             showToast('info', 'Transcription Cancelled', 'Process stopped.');
             if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
                 const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Safe access
@@ -2413,13 +2461,9 @@
 
             contentContainer.appendChild(nameElement); contentContainer.appendChild(statusElement);
 
-            const modelsContainer = document.createElement('div'); modelsContainer.className = 'file-models';
-            const completedModels = getCompletedModels(file.id);
-            if (completedModels.length > 0) { completedModels.forEach(model => { const modelTag = document.createElement('span'); modelTag.className = 'file-model'; modelTag.textContent = model; modelsContainer.appendChild(modelTag); }); }
-
             const removeButton = document.createElement('button'); removeButton.className = 'file-actions'; removeButton.innerHTML = '<i class="ri-close-line"></i>'; removeButton.onclick = (e) => { e.stopPropagation(); removeFileFromQueue(index); };
 
-            fileItem.appendChild(checkboxContainer); fileItem.appendChild(fileIcon); fileItem.appendChild(contentContainer); fileItem.appendChild(modelsContainer); fileItem.appendChild(removeButton);
+            fileItem.appendChild(checkboxContainer); fileItem.appendChild(fileIcon); fileItem.appendChild(contentContainer); fileItem.appendChild(removeButton);
 
             queueElement.appendChild(fileItem);
         });
@@ -2480,24 +2524,8 @@
         }
 
 
-        if (isCompleted && getCompletedModels(fileId).length > 0) { updateModelTags(queueItem, fileId); } // Update model tags only on completion
     }
 
-     function updateModelTags(queueItem, fileId){
-         const modelsContainer = queueItem.querySelector('.file-models');
-         const completedModels = getCompletedModels(fileId);
-         if (modelsContainer && completedModels.length > 0) {
-             modelsContainer.innerHTML = ''; // Clear existing
-             // Sort models for consistent display (optional)
-             const sortedModels = [...completedModels].sort();
-             sortedModels.forEach(model => {
-                 const modelTag = document.createElement('span'); modelTag.className = 'file-model';
-                 // Map internal model ID to display name if needed
-                 modelTag.textContent = model.replace('_', '-'); // Example mapping
-                 modelsContainer.appendChild(modelTag);
-             });
-         }
-     }
 
     // --- Queue Management ---
     function removeFileFromQueue(index) {
@@ -2602,11 +2630,9 @@
         
         // If we get any response (even an error), the backend is available
         pythonBackendAvailable = true;
-        console.log('Python backend detected: Available');
       } catch (error) {
         // If fetch fails completely, we're likely on file:// protocol
         pythonBackendAvailable = false;
-        console.log('Python backend detected: Not available (likely file:// protocol)');
       }
       
       return pythonBackendAvailable;
@@ -2659,7 +2685,6 @@
       
       // Additional validation for empty or whitespace-only keys
       if (apiKey && apiKey.length === 0) {
-        console.warn(`Empty API key detected for model: ${selectedModel}`);
         return null;
       }
       
@@ -2771,9 +2796,6 @@
       
       if (!uploadResponse.ok) {
         const errorText = await uploadResponse.text().catch(() => 'No error details');
-        console.error('Upload error details:', errorText);
-        console.error('Upload response status:', uploadResponse.status);
-        console.error('Upload response headers:', Object.fromEntries(uploadResponse.headers.entries()));
         
         let errorObj;
         try {
@@ -2814,7 +2836,6 @@
 
       if (!transcribeResponse.ok) {
         const errorText = await transcribeResponse.text().catch(() => 'No error details');
-        console.error('Transcription error details:', errorText);
         let errorObj;
         try {
           errorObj = JSON.parse(errorText);
@@ -2955,7 +2976,6 @@
         setTimeout(processNextFileInQueue, 300);
         
       } catch (error) {
-        console.error('Error processing direct API result:', error);
         handleApiError(file.id, 'Error processing transcription result');
       }
     }
@@ -3531,20 +3551,19 @@
         showToast('warning', 'No Files Ready', fileQueue.some(f=>f.selected) ? 'Selected files have errors or none are selected.' : 'Please select files to transcribe.'); 
         return;
       }
-      console.log(`Starting transcription batch for ${activeProcessingQueue.length} selected files.`);
       currentProcessingIndex = -1; 
       isCancelled = false;
       processNextFileInQueue();
 }
 
     function processNextFileInQueue() {
-      if (isCancelled) { console.log("Queue stopped by cancellation."); resetTranscriptionUI(); isCancelled = false; return; }
+      if (isCancelled) { resetTranscriptionUI(); isCancelled = false; return; }
       let nextIndex = -1;
       for (let i = currentProcessingIndex + 1; i < activeProcessingQueue.length; i++) {
           // Find the next file in the active queue that *still exists* in the main fileQueue
           if(fileQueue.some(fq => fq.id === activeProcessingQueue[i].id)) { nextIndex = i; break; }
       }
-      if (nextIndex === -1) { console.log('Finished processing batch.'); resetTranscriptionUI(); return; } // Batch done
+      if (nextIndex === -1) { resetTranscriptionUI(); return; } // Batch done
 
       // Prep for next file
       document.getElementById('job_id').value = 'job_' + Math.random().toString(36).substr(2, 9); connectSocket(); // New job ID, ensure connection
@@ -3557,7 +3576,6 @@
 
       showFilePreview(currentFile); // Show preview and update duration/calculator
       updateModelCompletionStatus(currentFile.id);
-      console.log(`Processing next: ${currentFile.name} (Index: ${currentProcessingIndex}, Job: ${document.getElementById('job_id').value})`);
       generationInProgress = true; updateTranscribeButtonText(); // Show Cancel
       showStatsLoading(true); // Show loading animation for stats
       clearTranscriptDisplay(); resetTranscriptionStats(); // Clear previous results
@@ -3593,7 +3611,6 @@
                 const result = await transcribeWithCloudAPI(file, selectedModel);
                 handleDirectAPIResult(file, selectedModel, result);
             } catch (error) {
-                console.error('Direct API error:', error);
                 handleApiError(file.id, error.message || 'Cloud API error');
             }
             return;
@@ -3627,7 +3644,6 @@
                 const prompt = document.getElementById('gpt4o_prompt').value.trim();
                 if (prompt) {
                     formData.append('prompt', prompt);
-                    console.log(`Using prompt for ${selectedModel}: ${prompt.substring(0, 50)}...`);
                 }
                 break;
             case "nova-3":
@@ -3660,12 +3676,10 @@
             return response.json();
         })
         .then(data => {
-            console.log('Initial server response:', data);
             if (data.status !== 'started') throw new Error(data.error || 'Failed to start job.');
             updateProgress(10, 'Waiting for processing...'); // Wait for socket events
         })
         .catch(error => {
-            console.error('Error sending file/starting job:', error);
             handleApiError(file.id, error.message || 'Could not start transcription.'); // Use helper for error
         });
     }
@@ -3687,7 +3701,6 @@
       if (generationInProgress && activeProcessingQueue.length > 0 && currentProcessingIndex >= 0) {
           const jobIdToCancel = document.getElementById('job_id').value;
           const fileId = activeProcessingQueue[currentProcessingIndex]?.id;
-          console.log(`User cancelling job: ${jobIdToCancel} for file: ${fileId}`);
           socket.emit('cancel_transcription', { job_id: jobIdToCancel });
           
           // Immediately clean up UI
@@ -3709,41 +3722,46 @@
           
           updateTranscribeButtonText();
       } else { 
-          console.log("Nothing to cancel."); 
           resetTranscriptionUI(); 
       }
     }
 
     // --- Media Preview & Sync ---
     function cleanupPreview() {
+        // Clean up event listeners
+        if (previewPlayer) {
+            previewPlayer.removeEventListener("timeupdate", handleVideoTimeUpdate);
+        }
+        
         // Revoke previous URL and destroy wavesurfer instances
         if (currentPreviewedFile?.objectURL) {
             URL.revokeObjectURL(currentPreviewedFile.objectURL);
-             console.log("Revoked Object URL for:", currentPreviewedFile.id);
         }
         if (wavesurfer) {
+            wavesurfer.un("audioprocess");
+            wavesurfer.un("seek");
             wavesurfer.destroy();
             wavesurfer = null;
-            console.log("Destroyed audio wavesurfer");
         }
-        if (videoWavesurfer) { // Destroy video's WS instance
-             videoWavesurfer.destroy();
-             videoWavesurfer = null;
-             console.log("Destroyed video wavesurfer");
+        if (videoWavesurfer) {
+            videoWavesurfer.un("audioprocess");
+            videoWavesurfer.un("seek");
+            videoWavesurfer.destroy();
+            videoWavesurfer = null;
         }
-        currentPreviewedFile = null; // Clear the tracking variable
+        currentPreviewedFile = null;
         // Explicitly stop video player
-        previewPlayer.pause();
-        previewPlayer.removeAttribute('src');
-        previewPlayer.load();
+        if (previewPlayer) {
+            previewPlayer.pause();
+            previewPlayer.removeAttribute('src');
+            previewPlayer.load();
+        }
     }
 
     function showFilePreview(file) {
         if (!file || currentPreviewedFile?.id === file.id) {
-            console.log("Preview requested for same file or no file, skipping reload.");
             return; // Avoid unnecessary reloads
         }
-        console.log("Showing preview for:", file.name, file.id);
 
 
         cleanupPreview();
@@ -3764,16 +3782,13 @@
 
         try {
              currentPreviewedFile.objectURL = URL.createObjectURL(file);
-             console.log("Created Object URL:", currentPreviewedFile.objectURL);
         } catch (e) {
-             console.error("Error creating object URL:", e);
              handleApiError(file.id, "Cannot create preview URL.");
              currentPreviewedFile = null; // Clear tracking if URL fails
              return;
         }
 
         if (file.type.startsWith('video/')) {
-            console.log("Setting up video preview...");
             showVideoBtn.style.display = 'inline-flex';
             showWaveformBtn.style.display = 'inline-flex';
             previewPlayer.style.display = 'block'; // Show video first by default
@@ -3782,17 +3797,15 @@
             previewPlayer.src = currentPreviewedFile.objectURL;
             previewPlayer.onloadedmetadata = () => {
                  currentFileDuration = previewPlayer.duration || 0;
-                 console.log("Video duration:", currentFileDuration);
                  requestPriceCalculatorUpdate();
                  attachSyncToPlayer();
                  setupPlayerEventHandlers();
                  // Initialize WaveSurfer for video in the background
                  initializeVideoWaveform(currentPreviewedFile.objectURL);
             };
-            previewPlayer.onerror = (e) => { console.error("Error loading video:", e); showToast('error', 'Video Error', 'Could not load video preview.'); currentFileDuration = 0; requestPriceCalculatorUpdate(); };
+            previewPlayer.onerror = (e) => { showToast('error', 'Video Error', 'Could not load video preview.'); currentFileDuration = 0; requestPriceCalculatorUpdate(); };
 
         } else if (file.type.startsWith('audio/')) {
-            console.log("Setting up audio preview...");
             audioPlayerContainer.style.display = 'flex'; // Show audio container
             // Use the main 'wavesurfer' instance for direct audio
             const colors = getWaveformColors();
@@ -3948,7 +3961,6 @@
                 showToast('info', 'Player Not Ready', 'Media loading or no file selected.');
             }
         } catch (err) {
-            console.error('Error in togglePlayPause:', err);
             showToast('error', 'Playback Error', 'Error: ' + err.message);
         }
     }
@@ -3972,38 +3984,52 @@
 
     function updateTranscriptHighlight(currentTime) {
          if (isNaN(currentTime)) return;
-         const activeTab = transcriptFormatSelect.value;
-         if (!activeTab) return;
-         const contentElement = document.getElementById(`${activeTab}Transcript`);
-         if (!contentElement) return;
-
-         const segments = contentElement.querySelectorAll(".transcript-segment");
-         let highlightedSegment = null;
-
-         segments.forEach(segment => {
-             segment.classList.remove("highlighted", "next-segment");
-             const start = parseFloat(segment.getAttribute("data-start"));
-             const end = parseFloat(segment.getAttribute("data-end"));
-             if (!isNaN(start) && !isNaN(end) && currentTime >= start && currentTime <= end) {
-                 segment.classList.add("highlighted");
-                 highlightedSegment = segment;
-             }
-         });
-
-         if (highlightedSegment) {
-             const containerRect = contentElement.getBoundingClientRect();
-             const segmentRect = highlightedSegment.getBoundingClientRect();
-             if (segmentRect.top < containerRect.top || segmentRect.bottom > containerRect.bottom) {
-                 highlightedSegment.scrollIntoView({ behavior: 'smooth', block: 'center' });
-             }
-         } else {
-             let closestSegment = null; let minStartTime = Infinity;
-             segments.forEach(segment => {
-                 const start = parseFloat(segment.getAttribute("data-start"));
-                 if (!isNaN(start) && start > currentTime && start < minStartTime) { minStartTime = start; closestSegment = segment; }
-             });
-             if (closestSegment) closestSegment.classList.add("next-segment");
+         
+         // Use requestAnimationFrame to throttle highlighting updates
+         if (highlightScheduled) {
+           queuedHighlightTime = currentTime;
+           return;
          }
+         
+         highlightScheduled = true;
+         requestAnimationFrame(() => {
+           const timeToUse = queuedHighlightTime !== null ? queuedHighlightTime : currentTime;
+           queuedHighlightTime = null;
+           highlightScheduled = false;
+           
+           const activeTab = transcriptFormatSelect.value;
+           if (!activeTab) return;
+           const contentElement = document.getElementById(`${activeTab}Transcript`);
+           if (!contentElement) return;
+
+           const segments = contentElement.querySelectorAll(".transcript-segment");
+           let highlightedSegment = null;
+
+           segments.forEach(segment => {
+               segment.classList.remove("highlighted", "next-segment");
+               const start = parseFloat(segment.getAttribute("data-start"));
+               const end = parseFloat(segment.getAttribute("data-end"));
+               if (!isNaN(start) && !isNaN(end) && timeToUse >= start && timeToUse <= end) {
+                   segment.classList.add("highlighted");
+                   highlightedSegment = segment;
+               }
+           });
+
+           if (highlightedSegment) {
+               const containerRect = contentElement.getBoundingClientRect();
+               const segmentRect = highlightedSegment.getBoundingClientRect();
+               if (segmentRect.top < containerRect.top || segmentRect.bottom > containerRect.bottom) {
+                   highlightedSegment.scrollIntoView({ behavior: 'smooth', block: 'center' });
+               }
+           } else {
+               let closestSegment = null; let minStartTime = Infinity;
+               segments.forEach(segment => {
+                   const start = parseFloat(segment.getAttribute("data-start"));
+                   if (!isNaN(start) && start > timeToUse && start < minStartTime) { minStartTime = start; closestSegment = segment; }
+               });
+               if (closestSegment) closestSegment.classList.add("next-segment");
+           }
+         });
      }
 
     function handleVideoTimeUpdate() {
@@ -4055,7 +4081,7 @@
                     if (isVideoVisible && previewPlayer.duration > 0) {
                         const wasPaused = previewPlayer.paused;
                         previewPlayer.currentTime = startTime;
-                        if (wasPaused) previewPlayer.play().catch(err => console.error('Error playing video after seek:', err));
+                        if (wasPaused) previewPlayer.play().catch(err => {});
                     } else if (currentWS?.isReady) {
                         const duration = currentWS.getDuration();
                         const wasPaused = !currentWS.isPlaying();
@@ -4209,7 +4235,6 @@
                     setTimeout(() => { copyButton.innerHTML = '<i class="ri-clipboard-line"></i><span>Copy</span>'; }, 2000);
                 })
                 .catch(err => { 
-                    console.error('Copy failed:', err); 
                     showToast('error', 'Copy Failed', 'Could not copy to clipboard.'); 
                 });
         } else {
@@ -4928,13 +4953,11 @@
             // Check if saved results exist for the *newly selected model* and display them
             const transcription = getFileTranscription(currentActiveFile, selectedModel);
             if (transcription) {
-                 console.log(`Switching view to saved results for ${selectedModel} on file ${currentActiveFile}.`);
                  showFileResult(currentActiveFile);
                  // Update stats for the loaded result
                  updateTranscriptionStats(transcription.default_transcript, transcription.elapsed_time);
             } else {
                  // Clear display if no results saved for this model/file combo
-                 console.log(`No saved results for ${selectedModel}, clearing transcript display.`);
                  clearTranscriptDisplay(); resetTranscriptionStats();
             }
         } else {
@@ -5021,13 +5044,11 @@
         // Get the price calculator element from cache
         const priceCalculatorDiv = domCache.priceCalculator;
         if (!priceCalculatorDiv) {
-            console.error("Price calculator div not found!");
             return;
         }
 
         const selectedModel = getSelectedModel();
         if (!selectedModel) {
-            console.error("No model selected!");
             return;
         }
 
@@ -5094,9 +5115,7 @@
         // Force the display property based on showCalculator
         if (priceCalculatorDiv) {
             priceCalculatorDiv.style.display = showCalculator ? 'block' : 'none';
-            console.log("Price calculator display:", priceCalculatorDiv.style.display, "for model:", selectedModel);
         } else {
-            console.error("Price calculator div not found!");
         }
 
         summarizationCostRow.style.display = 'none'; topicDetectionCostRow.style.display = 'none'; // Hide feature costs by default
@@ -5215,7 +5234,6 @@
             // Force display to block and ensure it's visible
             priceCalculatorDiv.style.display = 'block';
             priceCalculatorDiv.style.visibility = 'visible';
-            console.log("Price calculator should now be visible:", selectedModel);
         } else {
             priceCalculatorDiv.style.display = 'none';
         }
@@ -5256,7 +5274,7 @@
                 wavesurfer.pause();
                 wavesurfer.destroy();
                 wavesurfer = null;
-            } catch(e) { console.warn("Error destroying wavesurfer:", e); }
+            } catch(e) { }
         }
         
         if (videoWavesurfer) {
@@ -5264,7 +5282,7 @@
                 videoWavesurfer.pause();
                 videoWavesurfer.destroy();
                 videoWavesurfer = null;
-            } catch(e) { console.warn("Error destroying videoWavesurfer:", e); }
+            } catch(e) { }
         }
         
         // Apply theme changes
@@ -5343,7 +5361,6 @@
     function handleModelSelection() {
         const selectedModel = getSelectedModel();
         if (!selectedModel) return;
-        console.log(`Selected model: ${selectedModel}`);
         
         // Auto-switch to appropriate tab based on selected model (only when server available for local models)
         const isLocalModel = ['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'turbo'].includes(selectedModel);
@@ -5367,13 +5384,11 @@
             // Check if saved results exist for the *newly selected model* and display them
             const transcription = getFileTranscription(currentActiveFile, selectedModel);
             if (transcription) {
-                 console.log(`Switching view to saved results for ${selectedModel} on file ${currentActiveFile}.`);
                  showFileResult(currentActiveFile);
                  // Update stats for the loaded result
                  updateTranscriptionStats(transcription.default_transcript, transcription.elapsed_time);
             } else {
                  // Clear display if no results saved for this model/file combo
-                 console.log(`No saved results for ${selectedModel}, clearing transcript display.`);
                  clearTranscriptDisplay(); resetTranscriptionStats();
             }
         } else {
@@ -5427,7 +5442,6 @@
         const iconClass = MODEL_ICONS[modelId];
         
         if (!iconClass) {
-            console.warn(`No icon found for model: ${modelId}`);
             return '<i class="ri-question-line model-icon"></i>';
         }
         
