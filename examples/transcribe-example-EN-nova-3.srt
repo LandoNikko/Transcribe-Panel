@@ -1,0 +1,15 @@
+1
+00:00:01,360 --> 00:00:04,879
+The next station is Kings Cross Saint Ancross.
+
+2
+00:00:04,960 --> 00:00:06,080
+Change
+
+3
+00:00:06,080 --> 00:00:07,679
+for the Victoria,
+
+4
+00:00:07,679 --> 00:00:14,080
+Northern, Hammersmith and City, Metropolitan and Circle lines, and National and International Rail Services.

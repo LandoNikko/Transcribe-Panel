@@ -1,0 +1,15 @@
+1
+00:00:03,359 --> 00:00:04,240
+Attention,
+
+2
+00:00:04,319 --> 00:00:07,040
+la station garde est
+
+3
+00:00:07,040 --> 00:00:10,960
+fermée en raison de travaux et ne sera pas desservie.
+
+4
+00:00:10,960 --> 00:00:11,199
+Merci.

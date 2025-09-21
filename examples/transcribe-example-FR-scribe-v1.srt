@@ -1,0 +1,7 @@
+1
+00:00:03,459 --> 00:00:10,898
+Attention, la station Gare d'Austerlitz est fermée en raison de travaux et ne sera pas desservie.
+
+2
+00:00:10,919 --> 00:00:12,859
+Merci.

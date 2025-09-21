@@ -1,0 +1,15 @@
+1
+00:00:03,434 --> 00:00:03,952
+Attention,
+
+2
+00:00:04,294 --> 00:00:04,977
+la station
+
+3
+00:00:05,456 --> 00:00:10,605
+Garde Austerlitz est fermée en raison de travaux et ne sera pas desservie.
+
+4
+00:00:10,903 --> 00:00:11,246
+Merci.

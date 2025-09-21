@@ -1,0 +1,11 @@
+1
+00:00:01,518 --> 00:00:05,379
+The next station is King's Cross St Pancras.
+
+2
+00:00:05,419 --> 00:00:11,839
+Change for the Victoria, Northern, Hammersmith & City, Metropolitan and Circle lines, and
+
+3
+00:00:11,939 --> 00:00:16,539
+national and international rail services.
