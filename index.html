@@ -956,7 +956,16 @@
       
       const selectedModel = getSelectedModel();
       if (!selectedModel) return null;
-      return fileData.transcriptions[selectedModel] || null;
+      
+      // First try to get the result for the selected model
+      let result = fileData.transcriptions[selectedModel] || null;
+      
+      // If no result found and there's an uploaded transcript, use that
+      if (!result && fileData.transcriptions['uploaded']) {
+        result = fileData.transcriptions['uploaded'];
+      }
+      
+      return result;
     }
 
     function clearFileCache(fileId) {
@@ -1699,6 +1708,7 @@
             else if (format === 'tsv') switchTab('tsv');
             else switchTab('default');
             
+            showToast('success', 'Transcript Uploaded', `Successfully imported ${file.name} with ${segments.length} segments.`);
         };
         
         reader.onerror = function() {
@@ -1711,7 +1721,6 @@
 
     function processSelectedFiles(fileList) {
         if (!fileList || fileList.length === 0) return;
-
         domCache.progressContainer.classList.add('active');
         progressBar.style.width = "100%";
         progressPercent.textContent = "100%";

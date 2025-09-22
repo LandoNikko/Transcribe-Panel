@@ -21,10 +21,10 @@ For testing local models, see the Python Setup.
 - **Deepgram**: Nova-3
    - With AI summarization & topic detection
 - **Gladia**: Gladia v2
-- **ElevenLabs**: Scribe-v1
+- **ElevenLabs**: Scribe-v1, Scribe-v1-Experimental
 
 **Smart Features**
-- **Example File**: Try the tool with a sample
+- **Example Files**: Multi-language samples (EN, FR, JP)
 - **Batch Processing**: Queue multiple files
 - **Media Player**: Audio/video preview with waveform visualization
 - **Live Sync**: Transcript segments are highlighted by audio position
