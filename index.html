@@ -1109,6 +1109,13 @@
       return checkedRadio ? checkedRadio.value : null;
     }
 
+    // Global error handler to suppress AbortError from WaveSurfer
+    window.addEventListener('unhandledrejection', function(event) {
+      if (event.reason && event.reason.name === 'AbortError') {
+        event.preventDefault(); // Suppress the error
+      }
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
       domCache.init();
       loadApiKeysToCache();
@@ -1447,18 +1454,44 @@
         audioUrl: 'https://files.catbox.moe/xu2kk6.mp3',
         fileName: 'Transcript_Example_(Japanese).mp3',
         language: 'JP'
+      },
+      {
+        audioUrl: './examples/transcribe-example-KR.mp4',
+        fileName: 'Transcript_Example_(Korean).mp4',
+        language: 'KR'
       }
     ];
 
     const MODELS = ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'];
     const MODEL_NAMES = ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'];
+    
+    // Define which transcript files actually exist to avoid 404s
+    const AVAILABLE_TRANSCRIPTS = {
+      'EN': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'],
+      'FR': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'],
+      'JP': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'],
+      'KR': ['gladia', 'scribe-v1-experimental', 'scribe-v1']
+    };
 
     // Helper: Fetch and validate resources
     async function fetchExampleResources(examples) {
       const audioPromises = examples.map(ex => fetch(ex.audioUrl));
-      const transcriptPromises = examples.flatMap(ex => 
-        MODEL_NAMES.map(model => fetch(`./examples/transcribe-example-${ex.language}-${model}.srt`))
-      );
+      
+      // Only fetch transcript files that actually exist to avoid 404s
+      const transcriptPromises = [];
+      for (const ex of examples) {
+        for (const model of MODEL_NAMES) {
+          const availableModels = AVAILABLE_TRANSCRIPTS[ex.language] || [];
+          if (availableModels.includes(model)) {
+            // File exists, fetch it
+            const url = `./examples/transcribe-example-${ex.language}-${model}.srt`;
+            transcriptPromises.push(fetch(url));
+          } else {
+            // File doesn't exist, create mock empty response
+            transcriptPromises.push(Promise.resolve({ ok: false, text: () => Promise.resolve('') }));
+          }
+        }
+      }
       
       // Add Nova-3 AI features for English
       const aiFeaturePromises = [];
@@ -1480,37 +1513,33 @@
       audioResponses.forEach((res, i) => {
         if (!res.ok) throw new Error(`Failed to fetch ${examples[i].fileName}`);
       });
-      
-      transcriptResponses.forEach((res, i) => {
-        if (!res.ok) {
-          const exampleIndex = Math.floor(i / 3);
-          const modelIndex = i % 3;
-          throw new Error(`Failed to load ${MODEL_NAMES[modelIndex]} example for ${examples[exampleIndex].language}`);
-        }
-      });
-      
-      
+
       return { audioResponses, transcriptResponses, aiFeatureResponses };
     }
 
     // Helper: Process audio files into File objects
     async function processAudioFiles(audioResponses, examples) {
       const audioBlobs = await Promise.all(audioResponses.map(res => res.blob()));
-      return examples.map((ex, i) => new File([audioBlobs[i]], ex.fileName, { type: 'audio/mpeg' }));
+      return examples.map((ex, i) => {
+        const mimeType = ex.fileName.endsWith('.mp4') ? 'video/mp4' : 'audio/mpeg';
+        return new File([audioBlobs[i]], ex.fileName, { type: mimeType });
+      });
     }
 
     // Helper: Organize transcript data by language
     async function organizeTranscriptData(transcriptResponses, examples, aiFeatureResponses = []) {
-      const transcriptTexts = await Promise.all(transcriptResponses.map(res => res.text()));
+      const transcriptTexts = await Promise.all(
+        transcriptResponses.map(res => res.ok ? res.text() : Promise.resolve(''))
+      );
       const transcriptData = {};
       
       examples.forEach((ex, exIndex) => {
         const baseIndex = exIndex * MODEL_NAMES.length;
         transcriptData[ex.language] = {
-          'gladia': transcriptTexts[baseIndex],
-          'scribe-v1-experimental': transcriptTexts[baseIndex + 1],
-          'scribe-v1': transcriptTexts[baseIndex + 2],
-          'nova-3': transcriptTexts[baseIndex + 3]
+          'gladia': transcriptTexts[baseIndex] || '',
+          'scribe-v1-experimental': transcriptTexts[baseIndex + 1] || '',
+          'scribe-v1': transcriptTexts[baseIndex + 2] || '',
+          'nova-3': transcriptTexts[baseIndex + 3] || ''
         };
       });
       
@@ -1531,49 +1560,58 @@
       return transcriptData;
     }
 
-    // Helper: Create mock results for all models
+    // For example files
     function createMockResults(fileName, transcriptData) {
-      return MODELS.map((model, i) => {
-        const segments = parseTranscriptContent(transcriptData[MODEL_NAMES[i]], 'srt');
-        const formatData = buildAllTranscriptFormats(segments);
+      const results = [];
+      
+      MODELS.forEach((model, i) => {
+        const transcriptText = transcriptData[MODEL_NAMES[i]];
         
-        const result = {
-          fileName,
-          model,
-          task: 'transcribe',
-          language: 'auto-detected',
-          ...formatData,
-          elapsed_time: 0
-        };
-        
-        // Add AI features for Nova-3
-        if (model === 'nova-3' && transcriptData['nova-3-summary']) {
-          result.summary_text = transcriptData['nova-3-summary'];
-        }
-        if (model === 'nova-3' && transcriptData['nova-3-topics']) {
-          const originalTopicsText = transcriptData['nova-3-topics'];
-          result.topics_plain = originalTopicsText;
+        if (transcriptText && transcriptText.trim().length > 0) {
+          const segments = parseTranscriptContent(transcriptText, 'srt');
           
-          // Handle both JSON and plain text topics
-          let topicsData = originalTopicsText;
-          try {
-            topicsData = JSON.parse(topicsData);
-          } catch {
-            const topics = topicsData.trim().split(/[,\n]/).map(t => t.trim()).filter(t => t);
-            topicsData = {
-              segments: [{
-                topics: topics.map(topic => ({ topic: topic }))
-              }]
+          if (segments && segments.length > 0) {
+            const formatData = buildAllTranscriptFormats(segments);
+            
+            const result = {
+              fileName,
+              model,
+              task: 'transcribe',
+              language: 'auto-detected',
+              ...formatData,
+              elapsed_time: 0
             };
+            
+            if (model === 'nova-3' && transcriptData['nova-3-summary']) {
+              result.summary_text = transcriptData['nova-3-summary'];
+            }
+            if (model === 'nova-3' && transcriptData['nova-3-topics']) {
+              const originalTopicsText = transcriptData['nova-3-topics'];
+              result.topics_plain = originalTopicsText;
+              
+              let topicsData = originalTopicsText;
+              try {
+                topicsData = JSON.parse(topicsData);
+              } catch {
+                const topics = topicsData.trim().split(/[,\n]/).map(t => t.trim()).filter(t => t);
+                topicsData = {
+                  segments: [{
+                    topics: topics.map(topic => ({ topic: topic }))
+                  }]
+                };
+              }
+              result.topics_data = topicsData;
+            }
+            
+            results.push({
+              model,
+              result
+            });
           }
-          result.topics_data = topicsData;
         }
-        
-        return {
-          model,
-          result
-        };
       });
+      
+      return results;
     }
 
     // Setup UI when examples are loaded
@@ -1599,9 +1637,20 @@
         const audioFiles = await processAudioFiles(audioResponses, EXAMPLE_FILES);
         
         updateProgress(50, 'Adding files to queue...');
-        const fileList = new DataTransfer();
-        audioFiles.forEach(file => fileList.items.add(file));
-        processSelectedFiles(fileList.files);
+        
+        // Process files incrementally to maintain order and prevent flash
+        for (let i = 0; i < audioFiles.length; i++) {
+          const file = audioFiles[i];
+          const fileList = new DataTransfer();
+          fileList.items.add(file);
+          
+          processSelectedFiles(fileList.files);
+          
+          // Small delay between files to allow UI to update properly
+          if (i < audioFiles.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+        }
         
         updateProgress(60, 'Loading example transcripts...');
         const transcriptData = await organizeTranscriptData(transcriptResponses, EXAMPLE_FILES, aiFeatureResponses);
@@ -1623,7 +1672,7 @@
             });
             
             updateModelCompletionStatus(exampleFile.id);
-            
+
             if (exampleIndex === 0) {
               currentActiveFile = exampleFile.id;
               showFilePreview(exampleFile);
@@ -1822,7 +1871,7 @@
           // Check for actual Python backend by testing a specific Flask endpoint
             const response = await fetch('/transcribe_local', { 
               method: 'POST',
-              body: new FormData(), // Empty form data
+              body: new FormData(),
             signal: AbortSignal.timeout(3000)
           });
           // Flask backend will return 400 for missing required fields
@@ -1907,7 +1956,7 @@
         if (data.job_id === currentJobId) {
           updateProgress(data.progress, data.message || 'Processing...');
           if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
-            const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Safe access
+            const fileId = activeProcessingQueue[currentProcessingIndex]?.id;
             if (fileId) updateFileQueueItemStatusById(fileId, `Processing: ${data.progress}%`);
           }
           if (data.progress < 100 && generationInProgress) {
@@ -1931,7 +1980,7 @@
                 srt_text: data.srt_text, default_transcript: data.default_transcript,
                 numbered_transcript: data.numbered_transcript, vtt_text: data.vtt_text,
                 tsv_text: data.tsv_text, tsv_plain: data.tsv_plain, plain_srt: data.plain_srt,
-                elapsed_time: data.elapsed_time // Store elapsed time
+                elapsed_time: data.elapsed_time
               };
               setFileTranscription(currentFile.id, data.model_option, resultData);
 
@@ -1956,7 +2005,7 @@
          if (data.job_id === currentJobId) {
             showToast('error', 'Transcription Failed', data.error);
             if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
-                const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Safe access
+                const fileId = activeProcessingQueue[currentProcessingIndex]?.id;
                  if (fileId) {
                      updateFileQueueItemStatusById(fileId, 'Failed');
                      const fileInQueue = fileQueue.find(f => f.id === fileId);
@@ -1973,7 +2022,7 @@
         if (data.job_id === currentJobId) {
             showToast('info', 'Transcription Cancelled', 'Process stopped.');
             if (currentProcessingIndex >= 0 && currentProcessingIndex < activeProcessingQueue.length) {
-                const fileId = activeProcessingQueue[currentProcessingIndex]?.id; // Safe access
+                const fileId = activeProcessingQueue[currentProcessingIndex]?.id;
                 if (fileId) {
                     updateFileQueueItemStatusById(fileId, 'Cancelled');
                     const fileInQueue = fileQueue.find(f => f.id === fileId);
@@ -2131,10 +2180,10 @@
         if(statusBadge){
              if (isCompleted) { statusBadge.className = 'file-status completed'; statusBadge.textContent = 'Completed'; queueItem.classList.add('completed'); }
              else if (statusText === 'Failed') { statusBadge.className = 'file-status failed'; statusBadge.textContent = 'Failed'; queueItem.classList.add('failed'); }
-             else if (statusText === 'Cancelled') { statusBadge.className = 'file-status failed'; statusBadge.textContent = 'Cancelled'; queueItem.classList.add('failed'); } // Visually treat like failed
+             else if (statusText === 'Cancelled') { statusBadge.className = 'file-status failed'; statusBadge.textContent = 'Cancelled'; queueItem.classList.add('failed'); }
              else if (statusText.startsWith('Processing')) { statusBadge.className = 'file-status processing'; statusBadge.textContent = 'Processing'; queueItem.classList.add('processing'); }
              else if (statusText === 'Queued') { statusBadge.className = 'file-status idle'; statusBadge.textContent = 'Queued'; }
-             else if (statusText) { statusBadge.className = 'file-status idle'; statusBadge.textContent = statusText; } // Generic status like 'Idle'
+             else if (statusText) { statusBadge.className = 'file-status idle'; statusBadge.textContent = statusText; }
              else { statusBadge.remove(); }
         }
 
@@ -2389,38 +2438,6 @@
       return Object.assign({}, ...results);
     }
 
-    async function transcribeWithGladiaProxy(file, apiKey) {
-
-      
-      // Use the existing backend endpoint that already works
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('gladia_api_key', apiKey);
-      formData.append('job_id', 'direct_' + Date.now());
-      
-
-      
-      const response = await fetch('/transcribe_gladia', {
-        method: 'POST',
-        body: formData
-      });
-      
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-        throw new Error(error.error || `Backend proxy error: ${response.status}`);
-      }
-      
-      const result = await response.json();
-
-      return {
-        status: 'done',
-        result: {
-          transcription: {
-            full_transcript: 'Transcription will be handled by backend - check the main interface for results'
-          }
-        }
-      };
-    }
 
     async function transcribeWithGladia(file, apiKey) {
 
@@ -3303,7 +3320,7 @@
           // Find the next file in the active queue that *still exists* in the main fileQueue
           if(fileQueue.some(fq => fq.id === activeProcessingQueue[i].id)) { nextIndex = i; break; }
       }
-      if (nextIndex === -1) { resetTranscriptionUI(); return; } // Batch done
+      if (nextIndex === -1) { resetTranscriptionUI(); return; }
 
       // Prep for next file
       document.getElementById('job_id').value = 'job_' + Math.random().toString(36).substr(2, 9); 
@@ -3492,7 +3509,9 @@
             try {
                 wavesurfer.un("audioprocess");
                 wavesurfer.un("seek");
-            wavesurfer.destroy();
+                wavesurfer.un("ready");
+                wavesurfer.un("error");
+                wavesurfer.destroy();
             } catch (e) {
                 // Ignore cleanup errors
             }
@@ -3502,11 +3521,13 @@
             try {
                 videoWavesurfer.un("audioprocess");
                 videoWavesurfer.un("seek");
-             videoWavesurfer.destroy();
+                videoWavesurfer.un("ready");
+                videoWavesurfer.un("error");
+                videoWavesurfer.destroy();
             } catch (e) {
                 // Ignore cleanup errors
             }
-             videoWavesurfer = null;
+            videoWavesurfer = null;
         }
         currentPreviewedFile = null;
         // Explicitly stop video player
@@ -3526,7 +3547,7 @@
         cleanupPreview();
 
         // Setup new preview tracking
-        currentPreviewedFile = { id: file.id, type: file.type, objectURL: null }; // Reset wavesurfer instance initially
+        currentPreviewedFile = { id: file.id, type: file.type, objectURL: null };
         currentFileDuration = 0;
         requestPriceCalculatorUpdate();
 
@@ -3580,7 +3601,17 @@
             });
             wavesurfer.isReady = false;
             wavesurfer.load(currentPreviewedFile.objectURL);
-            wavesurfer.on('ready', () => { wavesurfer.isReady = true; currentFileDuration = wavesurfer.getDuration() || 0; document.querySelector(".time-right").textContent = formatTimeForDisplay(currentFileDuration); document.querySelector(".time-left").textContent = "0:00"; attachSyncToPlayer(); requestPriceCalculatorUpdate(); setupPlayerEventHandlers(); });
+            wavesurfer.on('ready', () => { 
+                if (wavesurfer) {
+                    wavesurfer.isReady = true; 
+                    currentFileDuration = wavesurfer.getDuration() || 0; 
+                    document.querySelector(".time-right").textContent = formatTimeForDisplay(currentFileDuration); 
+                    document.querySelector(".time-left").textContent = "0:00"; 
+                    attachSyncToPlayer(); 
+                    requestPriceCalculatorUpdate(); 
+                    setupPlayerEventHandlers(); 
+                }
+            });
             wavesurfer.on('error', (err) => { showToast('error', 'Audio Error', 'Failed to load audio waveform.'); currentFileDuration = 0; requestPriceCalculatorUpdate(); });
             setupAudioSeekPreview();
         } else {
@@ -3606,14 +3637,20 @@
         });
         videoWavesurfer.isReady = false;
         videoWavesurfer.load(url); // Load the same video URL
-        videoWavesurfer.on('ready', () => { videoWavesurfer.isReady = true; setupPlayerEventHandlers(); setupAudioSeekPreview(); }); // Attach handlers when ready
-        if(currentPreviewedFile) currentPreviewedFile.wavesurferInstance = videoWavesurfer; // Store instance
+        videoWavesurfer.on('ready', () => { 
+            if (videoWavesurfer) {
+                videoWavesurfer.isReady = true; 
+                setupPlayerEventHandlers(); 
+                setupAudioSeekPreview(); 
+            }
+        });
+        if(currentPreviewedFile) currentPreviewedFile.wavesurferInstance = videoWavesurfer;
     }
 
-    function setupAudioSeekPreview() { // Separate function for audio seek preview logic
+    function setupAudioSeekPreview() {
         const waveformEl = document.getElementById('waveform');
         let isWaveformDragging = false;
-        waveformEl.removeEventListener('mousemove', handleWaveformMouseMove); waveformEl.removeEventListener('mouseleave', handleWaveformMouseLeave); waveformEl.removeEventListener('mousedown', handleWaveformMouseDown); document.removeEventListener('mouseup', handleWaveformMouseUp); // Use document for mouseup
+        waveformEl.removeEventListener('mousemove', handleWaveformMouseMove); waveformEl.removeEventListener('mouseleave', handleWaveformMouseLeave); waveformEl.removeEventListener('mousedown', handleWaveformMouseDown); document.removeEventListener('mouseup', handleWaveformMouseUp);
         function handleWaveformMouseMove(e) {
             const currentWS = (currentPreviewedFile?.type.startsWith('video/')) ? videoWavesurfer : wavesurfer;
             if (!currentWS?.isReady) return;
@@ -3809,9 +3846,11 @@
             } else {
                 // This might be redundant if ready handler already does this, but safe
                 currentWS.once("ready", () => {
-                    currentWS.isReady = true;
-                    currentWS.on("audioprocess", syncAudio);
-                    currentWS.on("seek", (p) => syncAudio(p * currentWS.getDuration()));
+                    if (currentWS) {
+                        currentWS.isReady = true;
+                        currentWS.on("audioprocess", syncAudio);
+                        currentWS.on("seek", (p) => syncAudio(p * currentWS.getDuration()));
+                    }
                 });
             }
         }
@@ -4071,11 +4110,6 @@
 
     }
 
-    // Backwards compatibility function for the current selected format
-    function downloadTranscript() {
-        const activeTab = transcriptFormatSelect.querySelector('.dropdown-selected').dataset.value;
-        downloadTranscriptFormat(activeTab);
-    }
 
     // Helper needed for SRT/TSV download fallback
     function htmlToPlainTextSrt(srtHtml) { if (!srtHtml) return ''; const tempDiv = document.createElement('div'); tempDiv.innerHTML = srtHtml; let output = ""; tempDiv.querySelectorAll('.transcript-segment').forEach(seg => { const index = seg.querySelector('.srt-index')?.innerText.trim(); const timing = seg.querySelector('.srt-timing')?.innerText.trim(); const text = seg.querySelector('.srt-text')?.innerText.trim(); if (index && timing && text) output += `${index}\n${timing}\n${text}\n\n`; }); return output.trim(); }
@@ -4954,8 +4988,8 @@
 
     // --- Formatting & Misc ---
     function formatTopics(topicsData) { if (!topicsData?.segments?.length) return '<p><i>No topics detected.</i></p>'; const uniqueTopics = new Set(); topicsData.segments.forEach(seg => seg.topics?.forEach(t => uniqueTopics.add(t.topic))); if (uniqueTopics.size === 0) return '<p><i>No specific topics identified.</i></p>'; let html = '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">'; uniqueTopics.forEach(topic => { html += `<span class="topic-tag">${topic}</span>`; }); html += '</div>'; return html; }
-    const languages = { latin: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', cyrillic: 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', japanese: 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん', korean: 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗㅛㅜㅠㅡㅣ', chinese: '的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对可她里后小么心多天而能好都然没日于起还发成', arabic: 'ابتثجحخدذرزسشصضطظعغفقكلمنهويءآأؤإئ', devanagari: 'अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह' }; // For typewriter
-    function formatTimeForDisplay(seconds) { if (isNaN(seconds) || seconds < 0) return "0:00"; const totalSeconds = Math.floor(seconds); const minutes = Math.floor(totalSeconds / 60); const secs = totalSeconds % 60; return `${minutes}:${secs.toString().padStart(2, '0')}`; } // Local JS time formatter for UI display
+    const languages = { latin: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', cyrillic: 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', japanese: 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん', korean: 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗㅛㅜㅠㅡㅣ', chinese: '的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对可她里后小么心多天而能好都然没日于起还发成', arabic: 'ابتثجحخدذرزسشصضطظعغفقكلمنهويءآأؤإئ', devanagari: 'अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह' };
+    function formatTimeForDisplay(seconds) { if (isNaN(seconds) || seconds < 0) return "0:00"; const totalSeconds = Math.floor(seconds); const minutes = Math.floor(totalSeconds / 60); const secs = totalSeconds % 60; return `${minutes}:${secs.toString().padStart(2, '0')}`; }
 
     // Get consistent waveform colors
     function getWaveformColors() {
@@ -5027,12 +5061,14 @@
                     wavesurfer.isReady = false;
                     wavesurfer.load(audioURL);
                     wavesurfer.on('ready', () => { 
-                        wavesurfer.isReady = true;
-                        currentFileDuration = wavesurfer.getDuration() || 0;
-                        document.querySelector(".time-right").textContent = formatTimeForDisplay(currentFileDuration);
-                        document.querySelector(".time-left").textContent = "0:00";
-                        setupPlayerEventHandlers();
-                        attachSyncToPlayer();
+                        if (wavesurfer) {
+                            wavesurfer.isReady = true;
+                            currentFileDuration = wavesurfer.getDuration() || 0;
+                            document.querySelector(".time-right").textContent = formatTimeForDisplay(currentFileDuration);
+                            document.querySelector(".time-left").textContent = "0:00";
+                            setupPlayerEventHandlers();
+                            attachSyncToPlayer();
+                        }
                     });
                 }
                 else if (currentPreviewedFile.type.startsWith('video/')) {

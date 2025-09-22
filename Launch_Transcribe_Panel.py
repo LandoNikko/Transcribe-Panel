@@ -400,25 +400,6 @@ def cleanup_temp(job_id, filepath, model=None):
     cancellations.pop(job_id, None)
     print(f"Cleanup done for job {job_id}.")
 
-######################################################
-# UTILITY: Improve segments
-######################################################
-def improve_segments(segments):
-    """
-    Placeholder for any segment improvement logic.
-    This could be a function that takes in segments and returns improved segments.
-    """
-    return segments
-
-######################################################
-# UTILITY: Extract full text from result
-######################################################
-def extract_full_text_from_result(result):
-    """
-    Placeholder for extracting full text from a result.
-    This could be a function that takes in a result and returns the full text.
-    """
-    return ""
 
 ######################################################
 # ROUTE: index
