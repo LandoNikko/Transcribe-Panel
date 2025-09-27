@@ -325,7 +325,7 @@
     .dropdown-option:hover { background-color: var(--primary-color); color: white; }
     .dropdown-option:last-child { border-radius: 0 0 var(--radius) var(--radius); }
     .transcript-content { flex: 1; overflow-y: auto; padding: 1.5rem; position: relative; background-color: var(--primary-bg); }
-    .floating-font-controls { position: absolute; bottom: 1rem; right: 1rem; display: flex; gap: 0.5rem; z-index: 100; }
+    .floating-font-controls { position: absolute; bottom: 1rem; right: 1rem; display: flex; gap: 0.5rem; }
     .transcript-segment { padding: 0.75rem 1rem; background-color: var(--secondary-bg); border-radius: var(--radius); margin-bottom: 0.75rem; transition: var(--transition); position: relative; }
     .transcript-segment:hover { background-color: var(--tertiary-bg); }
     .seek-btn { position: absolute; top: 0.5rem; right: 0.5rem; opacity: 0; transition: opacity 0.2s ease-in-out; z-index: 10; }
@@ -409,8 +409,8 @@
 
     @media (max-width: 1600px) and (min-width: 993px) {
       .input-panel-content { flex-direction: column; }
-   }
-  
+    }
+
     @media (max-width: 1200px) {
       .app-container { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
       .header { position: fixed; top: 0; left: 0; right: 0; z-index: 1001; }
@@ -536,7 +536,7 @@
   <div class="app-container">
     <header class="header">
       <div class="header-buttons">
-        <button id="sidebarToggleBtn" class="btn btn-icon" title="Toggle Sidebar">
+        <button id="sidebarToggleBtn" class="btn btn-secondary" title="Toggle Sidebar">
           <i class="ri-layout-left-line"></i>
         </button>
       </div>
@@ -827,19 +827,19 @@
                 <button type="button" class="btn btn-sm btn-secondary" id="findReplaceButton" style="display: none;"><i class="ri-search-2-line"></i><span>Find & Replace</span><i class="ri-arrow-down-s-line"></i></button>
                 <button type="button" class="btn btn-sm btn-secondary" id="cancelEditButton" style="display: none;"><i class="ri-close-line"></i><span>Cancel</span></button>
                 <button type="button" class="btn btn-sm btn-secondary" id="editButton" disabled><i class="ri-edit-line"></i><span>Edit</span></button>
-                <button type="button" class="btn btn-sm btn-secondary" id="copyButton" disabled><i class="ri-clipboard-line"></i><span>Copy</span></button>
                 <div class="upload-download-group">
                   <button type="button" class="btn btn-sm btn-secondary" id="uploadButton"><i class="ri-upload-line"></i><span>Upload</span></button>
-                  <div class="download-dropdown disabled" id="downloadDropdown">
-                    <button type="button" class="btn btn-sm btn-secondary" id="downloadButton" disabled><i class="ri-download-line"></i><span>Download</span><i class="ri-arrow-down-s-line"></i></button>
+                  <div class="download-dropdown disabled" id="exportDropdown">
+                    <button type="button" class="btn btn-sm btn-secondary" id="exportButton" disabled><i class="ri-download-line"></i><span>Export</span><i class="ri-arrow-down-s-line"></i></button>
                     <div class="download-options">
                       <div class="download-option" data-format="default">Default (.txt)</div>
                       <div class="download-option" data-format="numbered">Numbered (.txt)</div>
                       <div class="download-option" data-format="srt">SRT (.srt)</div>
                       <div class="download-option" data-format="vtt">VTT (.vtt)</div>
                       <div class="download-option" data-format="tsv">TSV (.tsv)</div>
-                      <div class="download-option" data-format="summary" id="summaryDownloadOption" style="display: none;">Summary (.txt)</div>
-                      <div class="download-option" data-format="topics" id="topicsDownloadOption" style="display: none;">Topics (.txt)</div>
+                      <div class="download-option" data-format="summary" id="summaryExportOption" style="display: none;">Summary (.txt)</div>
+                      <div class="download-option" data-format="topics" id="topicsExportOption" style="display: none;">Topics (.txt)</div>
+                      <div class="download-option" data-format="copy" id="copyToClipboardOption">Copy to clipboard</div>
               </div>
             </div>
           </div>
@@ -916,6 +916,7 @@
     let highlightScheduled = false;
     let queuedHighlightTime = null;
     let cloudTranscriptionStartTime = null;
+    let currentAbortController = null;
 
     // Pricing constants
     const DEEPGRAM_INPUT_TOKEN_COST = 0.0003 / 1000;
@@ -1000,8 +1001,7 @@
     const fileInput = document.getElementById('local_file');
     const fileQueueEl = document.getElementById('fileQueue');
     const transcribeButton = document.getElementById('transcribeButton');
-    const copyButton = document.getElementById('copyButton');
-    const downloadButton = document.getElementById('downloadButton');
+    const exportButton = document.getElementById('exportButton');
     const uploadButton = document.getElementById('uploadButton');
     const transcriptFileInput = document.getElementById('transcript_file');
     const editButton = document.getElementById('editButton');
@@ -1082,16 +1082,6 @@
     };
 
 
-    const modelElements = {
-      get tabButtons() { return domCache.tabButtons; },
-      get tabContents() { return domCache.tabContents; },
-      get localTabButton() { return domCache.localTabButton; },
-      get cloudTabButton() { return domCache.cloudTabButton; },
-      get localTabContent() { return domCache.localTabContent; },
-      get cloudTabContent() { return domCache.cloudTabContent; },
-      get modelRadios() { return domCache.modelRadios; },
-      get modelInfoSections() { return domCache.modelInfoSections; }
-    };
 
     function updateSidebarIcon(state) {
       const iconMap = {
@@ -1105,14 +1095,13 @@
     }
 
     function getSelectedModel() {
-      const checkedRadio = Array.from(modelElements.modelRadios || []).find(radio => radio.checked);
+      const checkedRadio = Array.from(domCache.modelRadios || []).find(radio => radio.checked);
       return checkedRadio ? checkedRadio.value : null;
     }
 
-    // Global error handler to suppress AbortError from WaveSurfer
     window.addEventListener('unhandledrejection', function(event) {
       if (event.reason && event.reason.name === 'AbortError') {
-        event.preventDefault(); // Suppress the error
+        event.preventDefault();
       }
     });
 
@@ -1136,13 +1125,15 @@
       dropZoneCondensed.addEventListener('dragover', handleDragOver);
       dropZoneCondensed.addEventListener('dragleave', handleDragLeave);
       dropZoneCondensed.addEventListener('drop', handleFileDrop);
-      copyButton.addEventListener('click', copyTranscript);
-      
-      const downloadOptions = document.querySelectorAll('.download-option');
-      downloadOptions.forEach(option => {
+      const exportOptions = document.querySelectorAll('.download-option');
+      exportOptions.forEach(option => {
         option.addEventListener('click', (e) => {
           const format = e.currentTarget.getAttribute('data-format');
-          downloadTranscriptFormat(format);
+          if (format === 'copy') {
+            copyTranscript();
+          } else {
+            exportTranscriptFormat(format);
+          }
         });
       });
       uploadButton.addEventListener('click', () => transcriptFileInput.click());
@@ -1153,12 +1144,19 @@
       clearQueueBtn.addEventListener('click', clearQueue);
       transcribeButton.addEventListener('click', handleFormSubmit);
       playPauseButton.addEventListener('click', togglePlayPause);
-      document.getElementById('fontDecreaseBtn').addEventListener('click', decreaseFontSize);
-      document.getElementById('fontIncreaseBtn').addEventListener('click', increaseFontSize);
-      document.getElementById('findNextBtn').addEventListener('click', findNext);
-      document.getElementById('findPrevBtn').addEventListener('click', findPrevious);
-      document.getElementById('replaceBtn').addEventListener('click', replaceOne);
-      document.getElementById('replaceAllBtn').addEventListener('click', replaceAll);
+      const fontDecreaseBtn = document.getElementById('fontDecreaseBtn');
+      const fontIncreaseBtn = document.getElementById('fontIncreaseBtn');
+      const findNextBtn = document.getElementById('findNextBtn');
+      const findPrevBtn = document.getElementById('findPrevBtn');
+      const replaceBtn = document.getElementById('replaceBtn');
+      const replaceAllBtn = document.getElementById('replaceAllBtn');
+      
+      fontDecreaseBtn.addEventListener('click', decreaseFontSize);
+      fontIncreaseBtn.addEventListener('click', increaseFontSize);
+      findNextBtn.addEventListener('click', findNext);
+      findPrevBtn.addEventListener('click', findPrevious);
+      replaceBtn.addEventListener('click', replaceOne);
+      replaceAllBtn.addEventListener('click', replaceAll);
       
       // Ctrl+F support for find/replace in edit mode
       document.addEventListener('keydown', function(e) {
@@ -1173,10 +1171,15 @@
       });
 
       // API key visibility toggles
-      document.getElementById('showOpenApiKey').addEventListener('click', function() { togglePasswordVisibility('api_key_cloud', this); });
-      document.getElementById('showDeepgramApiKey').addEventListener('click', function() { togglePasswordVisibility('deepgram_api_key', this); });
-      document.getElementById('showGladiaApiKey').addEventListener('click', function() { togglePasswordVisibility('gladia_api_key', this); });
-      document.getElementById('showElevenLabsApiKey').addEventListener('click', function() { togglePasswordVisibility('elevenlabs_api_key', this); });
+      const showOpenApiKey = document.getElementById('showOpenApiKey');
+      const showDeepgramApiKey = document.getElementById('showDeepgramApiKey');
+      const showGladiaApiKey = document.getElementById('showGladiaApiKey');
+      const showElevenLabsApiKey = document.getElementById('showElevenLabsApiKey');
+      
+      showOpenApiKey.addEventListener('click', function() { togglePasswordVisibility('api_key_cloud', this); });
+      showDeepgramApiKey.addEventListener('click', function() { togglePasswordVisibility('deepgram_api_key', this); });
+      showGladiaApiKey.addEventListener('click', function() { togglePasswordVisibility('gladia_api_key', this); });
+      showElevenLabsApiKey.addEventListener('click', function() { togglePasswordVisibility('elevenlabs_api_key', this); });
 
       document.querySelectorAll('input[name="theme_option"]').forEach(radio => {
         radio.addEventListener('change', function() {
@@ -1198,13 +1201,13 @@
         });
       });
 
-      modelElements.tabButtons.forEach(button => {
+      domCache.tabButtons.forEach(button => {
         button.addEventListener('click', function() {
           switchModelTab(this.dataset.tab);
         });
       });
 
-      modelElements.modelRadios.forEach(radio => {
+      domCache.modelRadios.forEach(radio => {
         radio.addEventListener('change', function() {
           handleModelSelection();
         });
@@ -1235,14 +1238,13 @@
       }
       
       clearQueueBtn.disabled = true;
-      downloadButton.disabled = true;
-      copyButton.disabled = true;
+      exportButton.disabled = true;
       
       function handleScreenSize() {
         if (!domCache.sidebar || !domCache.appContainer || !domCache.sidebarButton) return;
         
+        // Hide sidebar at
         if (window.innerWidth <= 1200) {
-          // Small screens - hide sidebar initially but keep toggle button visible
           domCache.sidebar.classList.remove('mobile-open');
           domCache.sidebar.style.display = 'none';
           domCache.appContainer.style.gridTemplateColumns = '1fr';
@@ -1250,7 +1252,6 @@
           domCache.sidebarButton.style.display = 'flex';
           updateSidebarIcon('closed');
         } else {
-          // Large screens - show sidebar and info button
           domCache.sidebar.classList.remove('mobile-open');
           domCache.sidebar.style.display = 'flex';
           domCache.appContainer.style.gridTemplateColumns = 'var(--sidebar-width) 1fr';
@@ -1259,7 +1260,6 @@
           updateSidebarIcon('desktop-open');
         }
         
-        // Handle preview panel repositioning
         handlePreviewPanelPosition();
       }
       
@@ -1462,15 +1462,15 @@
       }
     ];
 
-    const MODELS = ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'];
-    const MODEL_NAMES = ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'];
+    const MODELS = ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3', 'whisper-1', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'];
+    const MODEL_NAMES = ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3', 'whisper-1', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'];
     
     // Define which transcript files actually exist to avoid 404s
     const AVAILABLE_TRANSCRIPTS = {
-      'EN': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'],
-      'FR': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'],
-      'JP': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3'],
-      'KR': ['gladia', 'scribe-v1-experimental', 'scribe-v1']
+      'EN': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3', 'whisper-1', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'],
+      'FR': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3', 'whisper-1', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'],
+      'JP': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'nova-3', 'whisper-1', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'],
+      'KR': ['gladia', 'scribe-v1-experimental', 'scribe-v1', 'whisper-1', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe']
     };
 
     // Helper: Fetch and validate resources
@@ -1535,12 +1535,11 @@
       
       examples.forEach((ex, exIndex) => {
         const baseIndex = exIndex * MODEL_NAMES.length;
-        transcriptData[ex.language] = {
-          'gladia': transcriptTexts[baseIndex] || '',
-          'scribe-v1-experimental': transcriptTexts[baseIndex + 1] || '',
-          'scribe-v1': transcriptTexts[baseIndex + 2] || '',
-          'nova-3': transcriptTexts[baseIndex + 3] || ''
-        };
+        transcriptData[ex.language] = {};
+        
+        MODEL_NAMES.forEach((modelName, modelIndex) => {
+          transcriptData[ex.language][modelName] = transcriptTexts[baseIndex + modelIndex] || '';
+        });
       });
       
       // AI features for Nova-3 (English)
@@ -1670,8 +1669,6 @@
             mockResults.forEach(({ model, result }) => {
               setFileTranscription(exampleFile.id, model, result);
             });
-            
-            updateModelCompletionStatus(exampleFile.id);
 
             if (exampleIndex === 0) {
               currentActiveFile = exampleFile.id;
@@ -1685,6 +1682,11 @@
           });
           
           updateFileQueue();
+          
+          if (currentActiveFile) {
+            updateModelCompletionStatus(currentActiveFile);
+          }
+          
           updateProgress(100, 'Complete');
           setTimeout(() => domCache.progressContainer.classList.remove('active'), 500);
         }, 500);
@@ -1815,14 +1817,14 @@
 
     // Tab Management
     function switchModelTab(tabName) {
-      if (!modelElements.tabButtons || !modelElements.tabContents) return;
+      if (!domCache.tabButtons || !domCache.tabContents) return;
 
-      modelElements.tabButtons.forEach(btn => btn.classList.remove('active'));
-      const targetButton = tabName === 'local' ? modelElements.localTabButton : modelElements.cloudTabButton;
+      domCache.tabButtons.forEach(btn => btn.classList.remove('active'));
+      const targetButton = tabName === 'local' ? domCache.localTabButton : domCache.cloudTabButton;
       if (targetButton) targetButton.classList.add('active');
 
-      modelElements.tabContents.forEach(content => content.classList.remove('active'));
-      const targetContent = tabName === 'local' ? modelElements.localTabContent : modelElements.cloudTabContent;
+      domCache.tabContents.forEach(content => content.classList.remove('active'));
+      const targetContent = tabName === 'local' ? domCache.localTabContent : domCache.cloudTabContent;
       if (targetContent) targetContent.classList.add('active');
 
       updateApiSectionsVisibility();
@@ -1837,7 +1839,7 @@
       const isGladiaModel = selectedModel === 'gladia';
       const isElevenLabsModel = selectedModel === 'scribe-v1' || selectedModel === 'scribe-v1-experimental';
       const isGPT4oModel = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'].includes(selectedModel);
-      const isOnLocalTab = modelElements.localTabButton?.classList.contains('active');
+      const isOnLocalTab = domCache.localTabButton?.classList.contains('active');
       const showApiSections = !isOnLocalTab;
 
       document.getElementById('openaiApiKeySection').style.display = (isOpenAIModel && showApiSections) ? 'block' : 'none';
@@ -1887,8 +1889,8 @@
     }
 
     function updateUIBasedOnServerAvailability() {
-      const localTabButton = modelElements.localTabButton;
-      const localTabContent = modelElements.localTabContent;
+      const localTabButton = domCache.localTabButton;
+      const localTabContent = domCache.localTabContent;
       const localNotice = document.getElementById('localModelsNotice');
       const localModelInputs = document.querySelectorAll('#localTabContent input[type="radio"]');
       
@@ -1933,9 +1935,7 @@
           socket.emit('join', { job_id: currentJobId });
        });
       socket.on('connect_error', (error) => { 
-        // Suppress console bloat - only log if server was previously available
         if (serverAvailable) {
-          console.warn('Server connection lost');
         serverAvailable = false;
         updateUIBasedOnServerAvailability();
         }
@@ -1946,7 +1946,6 @@
         updateUIBasedOnServerAvailability();
         }
       });
-      socket.on('joined', (data) => {});
       setupSocketListeners();
     }
 
@@ -2031,7 +2030,7 @@
                     }
                 }
             }
-            resetTranscriptionUI(); // Fully reset UI and stop queue
+            resetTranscriptionUI();
          }
       });
     }
@@ -2049,11 +2048,9 @@
         const shouldMoveToInput = screenWidth <= 1600 && screenWidth >= 993 && hasFiles;
         
         if (shouldMoveToInput && !previewPanel.classList.contains('moved-to-input')) {
-          // Move to input panel (at the beginning) only if there are files
           inputPanelContent.insertBefore(previewPanel, inputPanelContent.firstChild);
           previewPanel.classList.add('moved-to-input');
         } else if (!shouldMoveToInput && previewPanel.classList.contains('moved-to-input')) {
-          // Move back to output panel (at the beginning)
           outputPanel.insertBefore(previewPanel, outputPanel.firstChild);
           previewPanel.classList.remove('moved-to-input');
         }
@@ -2063,7 +2060,6 @@
     function updateFileQueue() {
         const queueElement = document.getElementById('fileQueue'); queueElement.innerHTML = '';
         fileCountEl.textContent = `${fileQueue.length} ${fileQueue.length === 1 ? 'file' : 'files'}`;
-        // Toggle between normal and condensed dropzone based on file count
         const dropzone = document.getElementById('dropZone');
         const dropzoneCondensed = document.getElementById('dropZoneCondensed');
         if (fileQueue.length > 0) {
@@ -2295,7 +2291,7 @@
     }
 
     // --- Direct Cloud API Functions ---
-    async function transcribeWithCloudAPI(file, selectedModel) {
+    async function transcribeWithCloudAPI(file, selectedModel, abortSignal = null) {
       const apiKey = getApiKeyForModel(selectedModel);
       if (!apiKey) {
         throw new Error(`API key missing for ${selectedModel}`);
@@ -2303,64 +2299,65 @@
 
       switch(selectedModel) {
         case 'whisper-1':
-          return await transcribeWithOpenAI(file, apiKey, selectedModel);
+          return await transcribeWithOpenAI(file, apiKey, selectedModel, abortSignal);
         case 'gpt-4o-transcribe':
         case 'gpt-4o-mini-transcribe':
-          return await transcribeWithOpenAI(file, apiKey, selectedModel);
+          return await transcribeWithOpenAI(file, apiKey, selectedModel, abortSignal);
         case 'nova-3':
-          return await transcribeWithDeepgram(file, apiKey);
+          return await transcribeWithDeepgram(file, apiKey, abortSignal);
         case 'gladia':
-          return await transcribeWithGladia(file, apiKey);
+          return await transcribeWithGladia(file, apiKey, abortSignal);
         case 'scribe-v1':
         case 'scribe-v1-experimental':
-          return await transcribeWithElevenLabs(file, apiKey);
+          return await transcribeWithElevenLabs(file, apiKey, abortSignal);
         default:
           throw new Error(`Direct API not implemented for ${selectedModel}`);
       }
     }
 
+    // API key mapping: model -> { cacheKey, inputId }
+    const API_KEY_MAPPING = {
+      'whisper-1': { cacheKey: 'openaiApiKey', inputId: 'api_key_cloud' },
+      'gpt-4o-transcribe': { cacheKey: 'openaiApiKey', inputId: 'api_key_cloud' },
+      'gpt-4o-mini-transcribe': { cacheKey: 'openaiApiKey', inputId: 'api_key_cloud' },
+      'nova-3': { cacheKey: 'deepgramApiKey', inputId: 'deepgram_api_key' },
+      'gladia': { cacheKey: 'gladiaApiKey', inputId: 'gladia_api_key' },
+      'scribe-v1': { cacheKey: 'elevenlabsApiKey', inputId: 'elevenlabs_api_key' },
+      'scribe-v1-experimental': { cacheKey: 'elevenlabsApiKey', inputId: 'elevenlabs_api_key' }
+    };
+
     function getApiKeyForModel(selectedModel) {
-      let apiKey = null;
-      switch(selectedModel) {
-        case 'whisper-1':
-        case 'gpt-4o-transcribe':
-        case 'gpt-4o-mini-transcribe':
-          apiKey = document.getElementById('api_key_cloud').value.trim();
-          break;
-        case 'nova-3':
-          apiKey = document.getElementById('deepgram_api_key').value.trim();
-          break;
-        case 'gladia':
-          apiKey = document.getElementById('gladia_api_key').value.trim();
-          break;
-        case 'scribe-v1':
-        case 'scribe-v1-experimental':
-          apiKey = document.getElementById('elevenlabs_api_key').value.trim();
-          break;
-        default:
-          return null;
+      const mapping = API_KEY_MAPPING[selectedModel];
+      if (!mapping) return null;
+      
+      // Get current value from DOM input (most up-to-date)
+      const inputElement = document.getElementById(mapping.inputId);
+      const currentValue = inputElement ? inputElement.value.trim() : '';
+      
+      // Update cache if value has changed
+      if (currentValue && currentValue !== apiKeyCache.get(mapping.cacheKey)) {
+        saveApiKeyIfChanged(mapping.cacheKey, currentValue);
       }
       
-      // Additional validation for empty or whitespace-only keys
-      if (apiKey && apiKey.length === 0) {
-        return null;
-      }
-      
-      return apiKey;
+      return currentValue.length > 0 ? currentValue : null;
     }
 
-    async function transcribeWithOpenAI(file, apiKey, model) {
+    async function transcribeWithOpenAI(file, apiKey, model, abortSignal = null) {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('model', model === 'whisper-1' ? 'whisper-1' : model);
-      formData.append('response_format', 'verbose_json');
+      
+      // GPT-4o models only support 'json' or 'text', not 'verbose_json'
+      const responseFormat = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'].includes(model) ? 'json' : 'verbose_json';
+      formData.append('response_format', responseFormat);
 
       const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`
         },
-        body: formData
+        body: formData,
+        signal: abortSignal
       });
 
       if (!response.ok) {
@@ -2371,14 +2368,15 @@
       return await response.json();
     }
 
-    async function transcribeWithDeepgram(file, apiKey) {
+    async function transcribeWithDeepgram(file, apiKey, abortSignal = null) {
       const response = await fetch('https://api.deepgram.com/v1/listen?model=nova-3&language=multi&diarize=true&punctuate=true&paragraphs=true&utterances=true&smart_format=true', {
         method: 'POST',
         headers: {
           'Authorization': `Token ${apiKey}`,
           'Content-Type': file.type
         },
-        body: file
+        body: file,
+        signal: abortSignal
       });
 
       if (!response.ok) {
@@ -2420,16 +2418,13 @@
           const params = new URLSearchParams({ language: 'en', [feature]: 'true' });
           const response = await fetch(`https://api.deepgram.com/v1/read?${params}`, baseConfig);
           if (response.ok) {
-            const result = await response.json();
+      const result = await response.json();
             return feature === 'summarize' 
               ? { summary_text: result.results?.summary?.text || null }
               : { topics_data: result.results?.topics || null };
           }
         } catch (error) {
-          // Suppress console bloat for optional AI features
-          if (!error.message?.includes('fetch') && !error.message?.includes('network')) {
-            console.warn(`Deepgram ${feature} error:`, error.message);
-          }
+          // Suppress errors for optional AI features
         }
         return {};
       });
@@ -2439,8 +2434,7 @@
     }
 
 
-    async function transcribeWithGladia(file, apiKey) {
-
+    async function transcribeWithGladia(file, apiKey, abortSignal = null) {
       
       // Validate API key
       if (!apiKey || apiKey.length < 10) {
@@ -2452,7 +2446,6 @@
       
       const uploadFormData = new FormData();
       uploadFormData.append('audio', file, file.name);
-      
 
       const trimmedKey = apiKey.trim();
       
@@ -2460,9 +2453,9 @@
         method: 'POST',
         headers: {
           'x-gladia-key': trimmedKey
-          // Note: Don't set Content-Type for FormData - browser sets multipart/form-data with boundary automatically
         },
-        body: uploadFormData
+        body: uploadFormData,
+        signal: abortSignal
       });
 
 
@@ -2502,7 +2495,8 @@
           'x-gladia-key': apiKey.trim(),
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: abortSignal
       });
 
 
@@ -2554,7 +2548,7 @@
       throw new Error('Gladia v2 transcription timeout');
     }
 
-    async function transcribeWithElevenLabs(file, apiKey) {
+    async function transcribeWithElevenLabs(file, apiKey, abortSignal = null) {
       const formData = new FormData();
       formData.append('file', file);
       
@@ -2572,7 +2566,8 @@
         headers: {
           'xi-api-key': apiKey.trim()
         },
-        body: formData
+        body: formData,
+        signal: abortSignal
       });
 
       if (!response.ok) {
@@ -2679,14 +2674,48 @@
 
     // Helper functions for direct API processing
     function estimateSegmentsFromText(text, file) {
-      const sentences = text.split(/[.!?]+/).filter(s => s.trim());
-      const avgDuration = 3; // seconds per sentence
+      if (!text || !text.trim()) {
+        return [{
+          start: 0,
+          end: 3,
+          text: text || "[Empty transcript]"
+        }];
+      }
+
+      // Sentence splitting for multiple languages
+      const sentencePattern = /[.!?。！？।॥፡፣፤፥፦፧፨]+\s*|[\n\r]+/g;
+      let sentences = text.split(sentencePattern).filter(s => s.trim());
+      
+      if (sentences.length <= 1) {
+        const isSpacelessLanguage = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text);
+        
+        if (isSpacelessLanguage) {
+          const chunkSize = 50;
+          sentences = [];
+          for (let i = 0; i < text.length; i += chunkSize) {
+            sentences.push(text.slice(i, i + chunkSize));
+          }
+        } else {
+          const words = text.trim().split(/\s+/);
+          const chunkSize = 15;
+          sentences = [];
+          for (let i = 0; i < words.length; i += chunkSize) {
+            sentences.push(words.slice(i, i + chunkSize).join(' '));
+          }
+        }
+      }
+      
+      if (sentences.length === 0) {
+        sentences = [text.trim()];
+      }
+      
+      const avgDuration = 3;
       
       return sentences.map((sentence, i) => ({
         start: i * avgDuration,
         end: (i + 1) * avgDuration,
         text: sentence.trim()
-      }));
+      })).filter(seg => seg.text);
     }
 
     function extractSegmentsFromDeepgramResponse(result) {
@@ -3365,16 +3394,27 @@
         }
 
 
-        if ((!serverAvailable && !isLocalModel) || selectedModel === 'gladia') {
+        if ((!serverAvailable && !isLocalModel) || selectedModel === 'gladia' || ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'].includes(selectedModel)) {
             try {
                 updateProgress(10, 'Connecting to cloud API...');
-                cloudTranscriptionStartTime = Date.now(); // Track start time for cloud models
-                const result = await transcribeWithCloudAPI(file, selectedModel);
+                cloudTranscriptionStartTime = Date.now();
+                
+                currentAbortController = new AbortController();
+                
+                const result = await transcribeWithCloudAPI(file, selectedModel, currentAbortController.signal);
+                
+                currentAbortController = null;
+                
                 handleDirectAPIResult(file, selectedModel, result);
             } catch (error) {
-                // Reset start time on error
                 cloudTranscriptionStartTime = null;
+                currentAbortController = null;
+                
+                if (error.name === 'AbortError') {
+                    handleApiError(file.id, 'Transcription cancelled by user');
+                } else {
                 handleApiError(file.id, error.message || 'Cloud API error');
+                }
             }
             return;
         }
@@ -3391,7 +3431,7 @@
         switch(selectedModel) {
             case "whisper-1":
                 endpoint = "/transcribe";
-                apiKey = document.getElementById('api_key_cloud').value.trim(); // Trim whitespace
+                apiKey = document.getElementById('api_key_cloud').value.trim();
                 if (!apiKey) { handleApiError(file.id, 'OpenAI API Key Missing'); return; }
                 formData.append('api_key', apiKey); saveApiKeyIfChanged('openaiApiKey', apiKey);
                 break;
@@ -3399,7 +3439,7 @@
             case "gpt-4o-mini-transcribe":
                 endpoint = selectedModel === "gpt-4o-transcribe" ? 
                            "/transcribe_openai_gpt4o" : "/transcribe_openai_gpt4o_mini";
-                apiKey = document.getElementById('api_key_cloud').value.trim(); // Trim whitespace
+                apiKey = document.getElementById('api_key_cloud').value.trim();
                 if (!apiKey) { handleApiError(file.id, 'OpenAI API Key Missing'); return; }
                 formData.append('api_key', apiKey); saveApiKeyIfChanged('openaiApiKey', apiKey);
                 
@@ -3411,7 +3451,7 @@
                 break;
             case "nova-3":
                 endpoint = "/transcribe_deepgram";
-                apiKey = document.getElementById('deepgram_api_key').value.trim(); // Trim whitespace
+                apiKey = document.getElementById('deepgram_api_key').value.trim();
                 if (!apiKey) { handleApiError(file.id, 'Deepgram API Key Missing'); return; }
                 formData.append('deepgram_api_key', apiKey); saveApiKeyIfChanged('deepgramApiKey', apiKey);
                 formData.append('summarize_enabled', summarizeCheckbox.checked ? 'true' : 'false');
@@ -3419,17 +3459,16 @@
                 break;
             case "gladia":
                 endpoint = "/transcribe_gladia";
-                apiKey = document.getElementById('gladia_api_key').value.trim(); // Trim whitespace
+                apiKey = document.getElementById('gladia_api_key').value.trim();
                 if (!apiKey) { handleApiError(file.id, 'Gladia v2 API Key Missing'); return; }
                 formData.append('gladia_api_key', apiKey); saveApiKeyIfChanged('gladiaApiKey', apiKey);
                 break;
             case "scribe-v1":
             case "scribe-v1-experimental":
                 endpoint = "/transcribe_elevenlabs";
-                apiKey = document.getElementById('elevenlabs_api_key').value.trim(); // Trim whitespace
+                apiKey = document.getElementById('elevenlabs_api_key').value.trim();
                 if (!apiKey) { handleApiError(file.id, 'ElevenLabs API Key Missing'); return; }
                 formData.append('elevenlabs_api_key', apiKey); 
-                // Pass the specific model_id for experimental version
                 if (selectedModel === 'scribe-v1-experimental') {
                   formData.append('model_id', 'scribe_v1_experimental');
                 }
@@ -3438,7 +3477,6 @@
         }
 
         // Start Transcription
-
         fetch(endpoint, { method: 'POST', body: formData })
         .then(response => {
             if (!response.ok) { return response.json().then(err => { throw new Error(err.error || `Server error: ${response.status}`); }).catch(() => { throw new Error(`HTTP error! status: ${response.status}`); }); }
@@ -3446,10 +3484,10 @@
         })
         .then(data => {
             if (data.status !== 'started') throw new Error(data.error || 'Failed to start job.');
-            updateProgress(10, 'Waiting for processing...'); // Wait for socket events
+            updateProgress(10, 'Waiting for processing...');
         })
         .catch(error => {
-            handleApiError(file.id, error.message || 'Could not start transcription.'); // Use helper for error
+            handleApiError(file.id, error.message || 'Could not start transcription.');
         });
     }
 
@@ -3467,11 +3505,18 @@
 
     function cancelCurrentTranscription() {
       if (generationInProgress && activeProcessingQueue.length > 0 && currentProcessingIndex >= 0) {
-          const jobIdToCancel = document.getElementById('job_id').value;
           const fileId = activeProcessingQueue[currentProcessingIndex]?.id;
-          socket.emit('cancel_transcription', { job_id: jobIdToCancel });
           
-          // Immediately clean up UI
+          if (currentAbortController) {
+              currentAbortController.abort();
+              currentAbortController = null;
+          }
+          
+          if (socket && socket.connected) {
+              const jobIdToCancel = document.getElementById('job_id').value;
+          socket.emit('cancel_transcription', { job_id: jobIdToCancel });
+          }
+          
           stopTypewriterAnimation();
           showStatsLoading(false);
           domCache.loadingOverlay.style.display = 'none';
@@ -3496,12 +3541,10 @@
 
     // --- Media Preview & Sync ---
     function cleanupPreview() {
-        // Clean up event listeners
         if (previewPlayer) {
             previewPlayer.removeEventListener("timeupdate", handleVideoTimeUpdate);
         }
         
-        // Revoke previous URL and destroy wavesurfer instances
         if (currentPreviewedFile?.objectURL) {
             URL.revokeObjectURL(currentPreviewedFile.objectURL);
         }
@@ -3511,9 +3554,8 @@
                 wavesurfer.un("seek");
                 wavesurfer.un("ready");
                 wavesurfer.un("error");
-                wavesurfer.destroy();
+            wavesurfer.destroy();
             } catch (e) {
-                // Ignore cleanup errors
             }
             wavesurfer = null;
         }
@@ -3523,14 +3565,12 @@
                 videoWavesurfer.un("seek");
                 videoWavesurfer.un("ready");
                 videoWavesurfer.un("error");
-                videoWavesurfer.destroy();
+             videoWavesurfer.destroy();
             } catch (e) {
-                // Ignore cleanup errors
             }
-            videoWavesurfer = null;
+             videoWavesurfer = null;
         }
         currentPreviewedFile = null;
-        // Explicitly stop video player
         if (previewPlayer) {
         previewPlayer.pause();
         previewPlayer.removeAttribute('src');
@@ -3546,12 +3586,10 @@
 
         cleanupPreview();
 
-        // Setup new preview tracking
         currentPreviewedFile = { id: file.id, type: file.type, objectURL: null };
         currentFileDuration = 0;
         requestPriceCalculatorUpdate();
 
-        // Hide players initially
         previewPlayer.style.display = 'none';
         audioPlayerContainer.style.display = 'none';
         showVideoBtn.style.display = 'none';
@@ -3580,7 +3618,6 @@
                  requestPriceCalculatorUpdate();
                  attachSyncToPlayer();
                  setupPlayerEventHandlers();
-                 // Initialize WaveSurfer for video in the background
                  initializeVideoWaveform(currentPreviewedFile.objectURL);
             };
             previewPlayer.onerror = (e) => { showToast('error', 'Video Error', 'Could not load video preview.'); currentFileDuration = 0; requestPriceCalculatorUpdate(); };
@@ -3612,7 +3649,13 @@
                     setupPlayerEventHandlers(); 
                 }
             });
-            wavesurfer.on('error', (err) => { showToast('error', 'Audio Error', 'Failed to load audio waveform.'); currentFileDuration = 0; requestPriceCalculatorUpdate(); });
+            wavesurfer.on('error', (err) => { 
+                if (currentPreviewedFile?.type.startsWith('audio/')) {
+                    showToast('error', 'Audio Error', 'Failed to load audio waveform.'); 
+                }
+                currentFileDuration = 0; 
+                requestPriceCalculatorUpdate(); 
+            });
             setupAudioSeekPreview();
         } else {
             showToast('warning', 'Unsupported File', 'Cannot preview this file type.');
@@ -3621,7 +3664,6 @@
     }
 
     function initializeVideoWaveform(url) {
-         // Use the separate instance for video's waveform
         if (videoWavesurfer) videoWavesurfer.destroy();
         const colors = getWaveformColors();
         videoWavesurfer = WaveSurfer.create({
@@ -3636,7 +3678,7 @@
             partialRender: true
         });
         videoWavesurfer.isReady = false;
-        videoWavesurfer.load(url); // Load the same video URL
+        videoWavesurfer.load(url);
         videoWavesurfer.on('ready', () => { 
             if (videoWavesurfer) {
                 videoWavesurfer.isReady = true; 
@@ -3747,7 +3789,7 @@
                      if (!previewPlayer.paused) {
                            const duration = currentWS.getDuration();
                            if(duration > 0) currentWS.seekTo(previewPlayer.currentTime / duration);
-                           previewPlayer.pause(); // Pause video
+                           previewPlayer.pause();
                      }
                      currentWS.play();
                  }
@@ -3809,11 +3851,18 @@
              }
          });
 
+          // Segment highlight scrolling
          if (highlightedSegment) {
              const containerRect = contentElement.getBoundingClientRect();
              const segmentRect = highlightedSegment.getBoundingClientRect();
              if (segmentRect.top < containerRect.top || segmentRect.bottom > containerRect.bottom) {
+                  if (segmentRect.bottom > containerRect.bottom) {
+                      const previousSegment = highlightedSegment.previousElementSibling; // Offset with previous segment for better context
+                      const targetSegment = previousSegment || highlightedSegment;
+                      targetSegment.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  } else {
                  highlightedSegment.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
              }
          } else {
              let closestSegment = null; let minStartTime = Infinity;
@@ -3847,9 +3896,9 @@
                 // This might be redundant if ready handler already does this, but safe
                 currentWS.once("ready", () => {
                     if (currentWS) {
-                        currentWS.isReady = true;
-                        currentWS.on("audioprocess", syncAudio);
-                        currentWS.on("seek", (p) => syncAudio(p * currentWS.getDuration()));
+                    currentWS.isReady = true;
+                    currentWS.on("audioprocess", syncAudio);
+                    currentWS.on("seek", (p) => syncAudio(p * currentWS.getDuration()));
                     }
                 });
             }
@@ -3916,8 +3965,8 @@
         // Show/hide special tabs and download options
         summaryOption.style.display = isDeepgram && results.summary_text ? 'block' : 'none';
         topicsOption.style.display = isDeepgram && results.topics_data ? 'block' : 'none';
-        document.getElementById('summaryDownloadOption').style.display = isDeepgram && results.summary_text ? 'block' : 'none';
-        document.getElementById('topicsDownloadOption').style.display = isDeepgram && results.topics_data ? 'block' : 'none';
+        document.getElementById('summaryExportOption').style.display = isDeepgram && results.summary_text ? 'block' : 'none';
+        document.getElementById('topicsExportOption').style.display = isDeepgram && results.topics_data ? 'block' : 'none';
 
         const currentTab = transcriptFormatSelect.querySelector('.dropdown-selected').dataset.value;
         if ((currentTab === 'summary' && summaryOption.style.display === 'none') || 
@@ -3935,8 +3984,8 @@
         document.querySelectorAll('.transcript-content .transcript-body').forEach(el => el.innerHTML = '');
         summaryOption.style.display = 'none';
         topicsOption.style.display = 'none';
-        document.getElementById('summaryDownloadOption').style.display = 'none';
-        document.getElementById('topicsDownloadOption').style.display = 'none';
+        document.getElementById('summaryExportOption').style.display = 'none';
+        document.getElementById('topicsExportOption').style.display = 'none';
         document.querySelector('.transcript-title-content').innerHTML = `<i class="ri-file-text-line"></i><h2>Transcript</h2>`;
         updateActionButtons();
     }
@@ -3979,17 +4028,16 @@
         const hasContent = !!(currentActiveFile && getCurrentFileResult(currentActiveFile));
         const hasActiveFile = !!currentActiveFile;
         if (!isEditMode) {
-        copyButton.disabled = !hasContent;
-        downloadButton.disabled = !hasContent;
+            exportButton.disabled = !hasContent;
             editButton.disabled = !hasContent;
             uploadButton.disabled = false;
             
-            const downloadDropdown = document.getElementById('downloadDropdown');
-            if (downloadDropdown) {
+            const exportDropdown = document.getElementById('exportDropdown');
+            if (exportDropdown) {
                 if (!hasContent) {
-                    downloadDropdown.classList.add('disabled');
+                    exportDropdown.classList.add('disabled');
                 } else {
-                    downloadDropdown.classList.remove('disabled');
+                    exportDropdown.classList.remove('disabled');
                 }
             }
         }
@@ -4045,16 +4093,16 @@
         if (textToCopy && textToCopy.trim()) {
             navigator.clipboard.writeText(textToCopy)
                 .then(() => {
-                    copyButton.innerHTML = '<i class="ri-check-line"></i><span>Copied!</span>';
-                    setTimeout(() => { copyButton.innerHTML = '<i class="ri-clipboard-line"></i><span>Copy</span>'; }, 2000);
+                    showToast('success', 'Copied!', 'Transcript copied to clipboard.');
                 })
                 .catch(err => { 
                     showToast('error', 'Copy Failed', 'Could not copy to clipboard.'); 
                 });
         } else {
+            showToast('warning', 'Nothing to Copy', 'No transcript content available.');
         }
     }
-    function downloadTranscriptFormat(format) {
+    function exportTranscriptFormat(format) {
         const results = getCurrentFileResult(currentActiveFile);
         if (!currentActiveFile || !results) { showToast('error', 'No Transcript', 'Nothing to download.'); return; }
         if (!format) return;
@@ -4625,9 +4673,30 @@
             for (let i = 0; i < 3; i++) createRandomLetter();
         }, 400);
     }
-    function stopTypewriterAnimation() { if (typewriterInterval) { clearInterval(typewriterInterval); typewriterInterval = null; const container = domCache.typewriterContainer; if (container) container.innerHTML = ''; } }
-    function initializeTheme() { const savedTheme = localStorage.getItem('theme') || 'light'; applyTheme(savedTheme); }
-    function togglePasswordVisibility(inputId, button) { const input = document.getElementById(inputId); if (input.type === "password") { input.type = "text"; button.innerHTML = '<i class="ri-eye-off-line"></i>'; } else { input.type = "password"; button.innerHTML = '<i class="ri-eye-line"></i>'; } }
+    function stopTypewriterAnimation() { 
+      if (typewriterInterval) { 
+        clearInterval(typewriterInterval); 
+        typewriterInterval = null; 
+        const container = domCache.typewriterContainer; 
+        if (container) container.innerHTML = ''; 
+      } 
+    }
+    
+    function initializeTheme() { 
+      const savedTheme = localStorage.getItem('theme') || 'light'; 
+      applyTheme(savedTheme); 
+    }
+    
+    function togglePasswordVisibility(inputId, button) { 
+      const input = document.getElementById(inputId); 
+      if (input.type === "password") { 
+        input.type = "text"; 
+        button.innerHTML = '<i class="ri-eye-off-line"></i>'; 
+      } else { 
+        input.type = "password"; 
+        button.innerHTML = '<i class="ri-eye-line"></i>'; 
+      } 
+    }
     function showToast(type, title, message) { 
         // Disable toasts on mobile view
         const isMobile = window.innerWidth <= 1200;
@@ -4640,8 +4709,24 @@
         t.querySelector('.toast-close').addEventListener('click', () => t.remove()); 
         setTimeout(() => t.remove(), 3000); 
     }
-    function requestNotificationPermission() { if ('Notification' in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission().then(p => { if(p !== "granted") { document.getElementById('notifyToggle').checked = false; }}); } else if (Notification.permission === "denied"){ showToast('warning', 'Notifications Blocked', 'Please enable in browser settings.'); document.getElementById('notifyToggle').checked = false; } }
-    function showBrowserNotification(title, message) { if ('Notification' in window && Notification.permission === "granted") new Notification(title, { body: message }); }
+    function requestNotificationPermission() { 
+      if ('Notification' in window && Notification.permission !== "granted" && Notification.permission !== "denied") { 
+        Notification.requestPermission().then(p => { 
+          if(p !== "granted") { 
+            document.getElementById('notifyToggle').checked = false; 
+          }
+        }); 
+      } else if (Notification.permission === "denied"){ 
+        showToast('warning', 'Notifications Blocked', 'Please enable in browser settings.'); 
+        document.getElementById('notifyToggle').checked = false; 
+      } 
+    }
+    
+    function showBrowserNotification(title, message) { 
+      if ('Notification' in window && Notification.permission === "granted") {
+        new Notification(title, { body: message }); 
+      }
+    }
     function resetTranscriptionUI() {
         generationInProgress = false;
         domCache.loadingOverlay.style.display = 'none';
@@ -4655,12 +4740,22 @@
         progressPercent.textContent = "0%";
         progressMessage.textContent = "Processing...";
         
+        // Reset abort controller
+        if (currentAbortController) {
+            currentAbortController = null;
+        }
+        
         // Reset transcribe button state
         const transcribeButton = document.getElementById("transcribeButton");
         transcribeButton.disabled = false;
         updateTranscribeButtonText();
     }
-    function updateProgress(percent, message) { progressBar.style.width = `${percent}%`; progressMessage.textContent = message || 'Processing...'; progressPercent.textContent = `${Math.round(percent)}%`; domCache.progressContainer.classList.toggle('active', percent > 0 && percent < 100); }
+    function updateProgress(percent, message) { 
+      progressBar.style.width = `${percent}%`; 
+      progressMessage.textContent = message || 'Processing...'; 
+      progressPercent.textContent = `${Math.round(percent)}%`; 
+      domCache.progressContainer.classList.toggle('active', percent > 0 && percent < 100); 
+    }
 
     // --- Model & Feature Handling ---
     function handleModelChange() {
@@ -4681,8 +4776,8 @@
         });
 
         // Update Model Info highlighting in sidebar - reset all headings first
-        if (modelElements.modelInfoSections) {
-            modelElements.modelInfoSections.forEach(section => {
+        if (domCache.modelInfoSections) {
+            domCache.modelInfoSections.forEach(section => {
             section.classList.remove('active-model');
         });
         }
@@ -4984,12 +5079,32 @@
         }
     }
     
-    function formatDuration(seconds) { if (isNaN(seconds) || seconds <= 0) return "0:00"; const m = Math.floor(seconds / 60); const s = Math.floor(seconds % 60); return `${m}:${s.toString().padStart(2, '0')}`; }
+    function formatDuration(seconds) { 
+      if (isNaN(seconds) || seconds <= 0) return "0:00"; 
+      const m = Math.floor(seconds / 60); 
+      const s = Math.floor(seconds % 60); 
+      return `${m}:${s.toString().padStart(2, '0')}`; 
+    }
 
     // --- Formatting & Misc ---
-    function formatTopics(topicsData) { if (!topicsData?.segments?.length) return '<p><i>No topics detected.</i></p>'; const uniqueTopics = new Set(); topicsData.segments.forEach(seg => seg.topics?.forEach(t => uniqueTopics.add(t.topic))); if (uniqueTopics.size === 0) return '<p><i>No specific topics identified.</i></p>'; let html = '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">'; uniqueTopics.forEach(topic => { html += `<span class="topic-tag">${topic}</span>`; }); html += '</div>'; return html; }
+    function formatTopics(topicsData) { 
+      if (!topicsData?.segments?.length) return '<p><i>No topics detected.</i></p>'; 
+      const uniqueTopics = new Set(); 
+      topicsData.segments.forEach(seg => seg.topics?.forEach(t => uniqueTopics.add(t.topic))); 
+      if (uniqueTopics.size === 0) return '<p><i>No specific topics identified.</i></p>'; 
+      let html = '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">'; 
+      uniqueTopics.forEach(topic => { html += `<span class="topic-tag">${topic}</span>`; }); 
+      html += '</div>'; 
+      return html; 
+    }
     const languages = { latin: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', cyrillic: 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', japanese: 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん', korean: 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗㅛㅜㅠㅡㅣ', chinese: '的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对可她里后小么心多天而能好都然没日于起还发成', arabic: 'ابتثجحخدذرزسشصضطظعغفقكلمنهويءآأؤإئ', devanagari: 'अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह' };
-    function formatTimeForDisplay(seconds) { if (isNaN(seconds) || seconds < 0) return "0:00"; const totalSeconds = Math.floor(seconds); const minutes = Math.floor(totalSeconds / 60); const secs = totalSeconds % 60; return `${minutes}:${secs.toString().padStart(2, '0')}`; }
+    function formatTimeForDisplay(seconds) { 
+      if (isNaN(seconds) || seconds < 0) return "0:00"; 
+      const totalSeconds = Math.floor(seconds); 
+      const minutes = Math.floor(totalSeconds / 60); 
+      const secs = totalSeconds % 60; 
+      return `${minutes}:${secs.toString().padStart(2, '0')}`; 
+    }
 
     // Get consistent waveform colors
     function getWaveformColors() {
@@ -5062,12 +5177,12 @@
                     wavesurfer.load(audioURL);
                     wavesurfer.on('ready', () => { 
                         if (wavesurfer) {
-                            wavesurfer.isReady = true;
-                            currentFileDuration = wavesurfer.getDuration() || 0;
-                            document.querySelector(".time-right").textContent = formatTimeForDisplay(currentFileDuration);
-                            document.querySelector(".time-left").textContent = "0:00";
-                            setupPlayerEventHandlers();
-                            attachSyncToPlayer();
+                        wavesurfer.isReady = true;
+                        currentFileDuration = wavesurfer.getDuration() || 0;
+                        document.querySelector(".time-right").textContent = formatTimeForDisplay(currentFileDuration);
+                        document.querySelector(".time-left").textContent = "0:00";
+                        setupPlayerEventHandlers();
+                        attachSyncToPlayer();
                         }
                     });
                 }
@@ -5142,8 +5257,8 @@
         }
 
         // Update Model Info highlighting in sidebar - reset all headings first
-        if (modelElements.modelInfoSections) {
-            modelElements.modelInfoSections.forEach(section => {
+        if (domCache.modelInfoSections) {
+            domCache.modelInfoSections.forEach(section => {
             section.classList.remove('active-model');
         });
         }
@@ -5238,7 +5353,7 @@
         
         if (enabled) {
             priceCalculatorDiv.style.display = 'block';
-            updatePriceCalculator();
+        updatePriceCalculator();
         } else {
             priceCalculatorDiv.style.display = 'none';
         }
