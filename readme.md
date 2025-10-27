@@ -8,7 +8,7 @@ The hosted version is a local interface that works by using your own API keys an
 
 For testing local models, see the Python Setup.
 
-![Transcribe Panel Screenshot](https://i.imgur.com/uJTJf1L.png)
+![Transcribe Panel Screenshot](https://i.imgur.com/WIFcH6T.jpeg)
 
 ## Features
 
